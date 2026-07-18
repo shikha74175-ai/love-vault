@@ -8,13 +8,9 @@ export default function PartnerPage() {
   const [loading, setLoading] = useState(true);
 
   const [myId, setMyId] = useState("");
-
   const [inviteCode, setInviteCode] = useState("");
-
   const [partnerCode, setPartnerCode] = useState("");
-
   const [partnerName, setPartnerName] = useState("");
-
   const [connected, setConnected] = useState(false);
 
   useEffect(() => {
@@ -35,14 +31,14 @@ export default function PartnerPage() {
 
     setMyId(user.id);
 
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("profiles")
       .select("*")
       .eq("id", user.id)
-      .single();
+      .maybeSingle();
 
-    if (data) {
-      setInviteCode(data.invite_code);
+    if (!error && data) {
+      setInviteCode(data.invite_code ?? "");
 
       if (data.partner_id) {
         setConnected(true);
@@ -51,11 +47,14 @@ export default function PartnerPage() {
           .from("profiles")
           .select("username")
           .eq("id", data.partner_id)
-          .single();
+          .maybeSingle();
 
         if (partner) {
           setPartnerName(partner.username || "Partner");
         }
+      } else {
+        setConnected(false);
+        setPartnerName("");
       }
     }
 
@@ -68,60 +67,41 @@ export default function PartnerPage() {
   }
 
   async function connectPartner() {
-    if (!partnerCode) {
+    if (!partnerCode.trim()) {
       alert("Enter Invite Code");
       return;
     }
 
-    if (partnerCode === inviteCode) {
+    if (partnerCode.trim() === inviteCode) {
       alert("You can't connect with yourself.");
       return;
     }
 
-    // Find partner profile
-    // Find partner profile
-const { data: partner, error } = await supabase
-  .from("profiles")
-  .select("*")
-  .eq("invite_code", partnerCode.trim())
-  .maybeSingle();
+    // Find partner
+    const { data: partner, error: findError } = await supabase
+      .from("profiles")
+      .select("*")
+      .eq("invite_code", partnerCode.trim())
+      .maybeSingle();
 
-console.log("Partner:", partner);
-console.log("Error:", error);
-
-if (error || !partner) {
-  alert("Invalid Invite Code");
-  return;
-}
+    if (findError || !partner) {
+      alert("Invalid Invite Code");
+      return;
+    }
 
     if (partner.partner_id) {
       alert("This user is already connected.");
       return;
     }
 
-    // Update current user
-    const { error: err1 } = await supabase
-      .from("profiles")
-      .update({
-        partner_id: partner.id,
-      })
-      .eq("id", myId);
+    // RPC
+    const { error: rpcError } = await supabase.rpc("connect_partners", {
+      my_user: myId,
+      partner_user: partner.id,
+    });
 
-    if (err1) {
-      alert(err1.message);
-      return;
-    }
-
-    // Update partner
-    const { error: err2 } = await supabase
-      .from("profiles")
-      .update({
-        partner_id: myId,
-      })
-      .eq("id", partner.id);
-
-    if (err2) {
-      alert(err2.message);
+    if (rpcError) {
+      alert(rpcError.message);
       return;
     }
 
@@ -129,7 +109,7 @@ if (error || !partner) {
 
     setPartnerCode("");
 
-    loadProfile();
+    await loadProfile();
   }
 
   return (
