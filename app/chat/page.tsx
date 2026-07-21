@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/client";
+import EmojiPicker from "emoji-picker-react";
 
 import {
   Send,
@@ -12,8 +13,15 @@ import {
   Download,
   Loader2,
   Smile,
+  Search,
+  Reply,
+  Pencil,
+  Copy,
+  Trash2,
+  MoreVertical,
+  Check,
+  Clock3,
 } from "lucide-react";
-
 type Message = {
   id: string;
   sender_id: string;
@@ -23,15 +31,29 @@ type Message = {
 
   image_url: string | null;
   audio_url: string | null;
+  video_url: string | null;
+  viewed_by: string[];
+
   reaction: string | null;
+
+  reply_to_id: string | null;
+
+  edited: boolean;
+  view_once: boolean;
+
+  deleted_for_everyone: boolean;
+
+  deleted_for: string[];
 
   created_at: string;
 
   seen: boolean;
+  status?: "sending" | "sent" | "delivered" | "seen";
 };
 
-export default function ChatPage() {
+const QUICK_REACTIONS = ["❤️", "😂", "😮", "😢", "🙏", "👍"];
 
+export default function ChatPage() {
   // Messages
   const [messages, setMessages] = useState<Message[]>([]);
 
@@ -40,6 +62,7 @@ export default function ChatPage() {
 
   // Current User
   const [myId, setMyId] = useState("");
+  const [viewOnce, setViewOnce] = useState(false);
 
   // Partner
   const [partnerId, setPartnerId] = useState("");
@@ -54,6 +77,8 @@ export default function ChatPage() {
 
   // Image Preview
   const [previewImage, setPreviewImage] = useState("");
+  const [previewImageMessage, setPreviewImageMessage] =
+  useState<Message | null>(null);
 
   // Upload Loader
   const [uploading, setUploading] = useState(false);
@@ -61,35 +86,46 @@ export default function ChatPage() {
   // Voice Recording
   const [recording, setRecording] = useState(false);
 
+  // Emoji picker (for composing a message)
+  const [showEmoji, setShowEmoji] = useState(false);
+
+  // Per-message "..." menu (reply / edit / copy / delete / react)
+  const [menuFor, setMenuFor] = useState<string | null>(null);
+
+  // Reply
+  const [replyTo, setReplyTo] = useState<Message | null>(null);
+
+  // Edit
+  const [editingMessage, setEditingMessage] = useState<Message | null>(null);
+
+  // Search
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+
   // Refs
   const bottomRef = useRef<HTMLDivElement>(null);
-
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunks = useRef<Blob[]>([]);
+  const messageRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const [disappearAfter, setDisappearAfter] = useState<number | null>(null);
 
-  const mediaRecorderRef =
-    useRef<MediaRecorder | null>(null);
-  const [showEmoji, setShowEmoji] = useState(false);
-  const [reactionFor, setReactionFor] = useState<string | null>(null);
-
-  const audioChunks =
-    useRef<Blob[]>([]);
-      // ==========================
+  // ==========================
   // Auto Scroll
   // ==========================
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({
-      behavior: "smooth",
-    });
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  // ==========================
+  // Close any open per-message menu on outside click
+  // ==========================
   useEffect(() => {
-
-const close = () => setReactionFor(null);
-
-window.addEventListener("click", close);
-
-return () => window.removeEventListener("click", close);
-
-}, []);
+    const close = () => setMenuFor(null);
+    window.addEventListener("click", close);
+    return () => window.removeEventListener("click", close);
+  }, []);
 
   // ==========================
   // Initial Load
@@ -108,11 +144,7 @@ return () => window.removeEventListener("click", close);
       .channel(`messages-${myId}`)
       .on(
         "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "messages",
-        },
+        { event: "*", schema: "public", table: "messages" },
         () => {
           loadMessages(myId, partnerId);
         }
@@ -186,25 +218,31 @@ return () => window.removeEventListener("click", close);
   // Online / Offline Presence
   // ==========================
   useEffect(() => {
+  const interval = setInterval(() => {
+    setMessages((prev) =>
+      prev.filter((m: any) => {
+        if (!m.expires_at) return true;
+        return new Date(m.expires_at).getTime() > Date.now();
+      })
+    );
+  }, 10000); // every 10 seconds
+
+  return () => clearInterval(interval);
+}, []);
+  useEffect(() => {
     if (!myId) return;
 
     const goOffline = async () => {
       await supabase
         .from("profiles")
-        .update({
-          is_online: false,
-          last_seen: new Date().toISOString(),
-        })
+        .update({ is_online: false, last_seen: new Date().toISOString() })
         .eq("id", myId);
     };
 
     const goOnline = async () => {
       await supabase
         .from("profiles")
-        .update({
-          is_online: true,
-          last_seen: new Date().toISOString(),
-        })
+        .update({ is_online: true, last_seen: new Date().toISOString() })
         .eq("id", myId);
     };
 
@@ -217,158 +255,466 @@ return () => window.removeEventListener("click", close);
     };
 
     window.addEventListener("beforeunload", goOffline);
-    document.addEventListener(
-      "visibilitychange",
-      handleVisibility
-    );
+    document.addEventListener("visibilitychange", handleVisibility);
 
     return () => {
       goOffline();
-
-      window.removeEventListener(
-        "beforeunload",
-        goOffline
-      );
-
-      document.removeEventListener(
-        "visibilitychange",
-        handleVisibility
-      );
+      window.removeEventListener("beforeunload", goOffline);
+      document.removeEventListener("visibilitychange", handleVisibility);
     };
   }, [myId]);
+
   // ==========================
-// Load Chat
-// ==========================
-async function loadChat() {
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // Load Chat
+  // ==========================
+  async function loadChat() {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
 
-  if (!user) return;
+    if (!user) return;
 
-  setMyId(user.id);
+    setMyId(user.id);
 
-  // Mark myself online
-  await supabase
-    .from("profiles")
-    .update({
-      is_online: true,
-      last_seen: new Date().toISOString(),
-    })
-    .eq("id", user.id);
+    await supabase
+      .from("profiles")
+      .update({ is_online: true, last_seen: new Date().toISOString() })
+      .eq("id", user.id);
 
-  // Get my profile
-  const { data: profile, error } = await supabase
-    .from("profiles")
-    .select("partner_id")
-    .eq("id", user.id)
-    .single();
+    const { data: profile, error } = await supabase
+      .from("profiles")
+      .select("partner_id")
+      .eq("id", user.id)
+      .single();
 
-  if (error || !profile?.partner_id) {
-    alert("No partner connected.");
-    return;
+    if (error || !profile?.partner_id) {
+      alert("No partner connected.");
+      return;
+    }
+
+    setPartnerId(profile.partner_id);
+
+    const { data: partner } = await supabase
+      .from("profiles")
+      .select("username,is_online,last_seen")
+      .eq("id", profile.partner_id)
+      .single();
+
+    if (partner) {
+      setPartnerName(partner.username || "Partner");
+      setOnline(partner.is_online);
+      setLastSeen(partner.last_seen || "");
+    }
+
+    await loadMessages(user.id, profile.partner_id);
   }
 
-  setPartnerId(profile.partner_id);
-
-  // Get partner details
-  const { data: partner } = await supabase
-    .from("profiles")
-    .select("username,is_online,last_seen")
-    .eq("id", profile.partner_id)
-    .single();
-
-  if (partner) {
-    setPartnerName(partner.username || "Partner");
-    setOnline(partner.is_online);
-    setLastSeen(partner.last_seen || "");
-  }
-
-  // Load previous messages
-  await loadMessages(user.id, profile.partner_id);
-}
-// ==========================
-// Load Messages
-// ==========================
-async function loadMessages(my: string, partner: string) {
+  // ==========================
+  // Load Messages
+  // ==========================
+ async function loadMessages(my: string, partner: string) {
   const { data, error } = await supabase
     .from("messages")
     .select("*")
     .or(
       `and(sender_id.eq.${my},receiver_id.eq.${partner}),and(sender_id.eq.${partner},receiver_id.eq.${my})`
     )
-    .order("created_at", {
-      ascending: true,
-    });
+    .order("created_at", { ascending: true });
 
   if (error) {
     console.error(error);
     return;
   }
 
-  // Mark partner messages as seen
+  // Mark messages as seen
   await supabase
     .from("messages")
-    .update({
-      seen: true,
-    })
+    .update({ seen: true })
     .eq("receiver_id", my)
     .eq("sender_id", partner)
     .eq("seen", false);
 
-  setMessages(data ?? []);
+  // Generate signed URLs for private buckets
+ const processedMessages = await Promise.all(
+  (data ?? []).map(async (m: any) => {
+    let imageUrl = null;
+    let audioUrl = null;
+    let videoUrl = null;
 
-  setTimeout(() => {
-    bottomRef.current?.scrollIntoView({
-      behavior: "smooth",
-    });
-  }, 100);
-}
+    // IMAGE
+    if (m.image_url) {
+      const { data, error } = await supabase.storage
+        .from("chat-images")
+        .createSignedUrl(m.image_url, 60 * 60);
 
-// ==========================
-// Send Text Message
-// ==========================
-async function sendMessage() {
-  if (!text.trim()) return;
+      if (!error) {
+        imageUrl = data?.signedUrl ?? null;
+      }
+    }
 
-  const { error } = await supabase
-    .from("messages")
-    .insert({
+    // AUDIO
+    if (m.audio_url) {
+      const { data, error } = await supabase.storage
+        .from("chat-audio")
+        .createSignedUrl(m.audio_url, 60 * 60);
+
+      if (!error) {
+        audioUrl = data?.signedUrl ?? null;
+      }
+    }
+
+    // VIDEO
+    if (m.video_url) {
+      const { data, error } = await supabase.storage
+        .from("chat-videos")
+        .createSignedUrl(m.video_url, 60 * 60);
+
+      if (!error) {
+        videoUrl = data?.signedUrl ?? null;
+      }
+    }
+
+    return {
+      ...m,
+
+      image_url: imageUrl,
+      audio_url: audioUrl,
+      video_url: videoUrl,
+
+      deleted_for: m.deleted_for ?? [],
+
+      status: m.seen
+        ? "seen"
+        : m.receiver_id === my
+        ? "delivered"
+        : "sent",
+    };
+  })
+);
+
+const visibleMessages = processedMessages.filter((m: any) => {
+  if (!m.expires_at) return true;
+
+  return new Date(m.expires_at).getTime() > Date.now();
+});
+
+setMessages(visibleMessages);
+
+setTimeout(() => {
+  bottomRef.current?.scrollIntoView({
+    behavior: "smooth",
+  });
+}, 100);
+  }
+
+  // ==========================
+  // Send Text Message
+  // ==========================
+  async function sendMessage() {
+    if (!text.trim()) return;
+    const expiresAt = disappearAfter
+  ? new Date(Date.now() + disappearAfter * 1000).toISOString()
+  : null;
+
+    const { error } = await supabase.from("messages").insert({
       sender_id: myId,
       receiver_id: partnerId,
       message: text.trim(),
       image_url: null,
       audio_url: null,
+      video_url: null,
+      reply_to_id: replyTo?.id ?? null,
       seen: false,
+      disappear_after: disappearAfter,
+      expires_at: expiresAt,
     });
 
-  if (error) {
-    alert(error.message);
-    return;
-  }
+    if (error) {
+      alert(error.message);
+      return;
+    }
 
-  // Stop typing
-  await supabase
-    .channel(`typing-${partnerId}`)
-    .send({
+    await supabase.channel(`typing-${partnerId}`).send({
       type: "broadcast",
       event: "typing",
-      payload: {
-        user: myId,
-        typing: false,
-      },
+      payload: { user: myId, typing: false },
     });
 
-  setText("");
+    setText("");
+    setReplyTo(null);
+    setDisappearAfter(null);
 
-  await loadMessages(myId, partnerId);
-}
+    await loadMessages(myId, partnerId);
+  }
 
-// ==========================
-// Upload Image
-// ==========================
-async function uploadImage(file: File) {
-  if (!partnerId || !myId) return;
+  // ==========================
+  // Save Edited Message
+  // ==========================
+  async function saveEditedMessage() {
+    if (!editingMessage || !text.trim()) return;
+
+    const { error } = await supabase
+      .from("messages")
+      .update({ message: text.trim(), edited: true })
+      .eq("id", editingMessage.id);
+
+    if (error) {
+      alert(error.message);
+      return;
+    }
+
+    setEditingMessage(null);
+    setText("");
+
+    await loadMessages(myId, partnerId);
+  }
+
+  function cancelEdit() {
+    setEditingMessage(null);
+    setText("");
+  }
+
+  function cancelReply() {
+    setReplyTo(null);
+  }
+
+  // ==========================
+  // Upload Image
+  // ==========================
+  async function uploadImage(file: File) {
+    if (!partnerId || !myId) return;
+
+    setUploading(true);
+
+    const ext = file.name.split(".").pop();
+    const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${ext}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from("chat-images")
+      .upload(fileName, file);
+
+    if (uploadError) {
+      setUploading(false);
+      alert(uploadError.message);
+      return;
+    }
+    const expiresAt = disappearAfter
+  ? new Date(Date.now() + disappearAfter * 1000).toISOString()
+  : null;
+
+   const { error } = await supabase
+  .from("messages")
+  .insert({
+    sender_id: myId,
+    receiver_id: partnerId,
+    message: "",
+    image_url: fileName,
+    audio_url: null,
+    video_url: null,
+    view_once: viewOnce,
+    reply_to_id: replyTo?.id ?? null,
+    seen: false,
+    disappear_after: disappearAfter,
+    expires_at: expiresAt,
+  });
+
+    setUploading(false);
+    setReplyTo(null);
+
+    if (error) {
+      alert(error.message);
+      return;
+    }
+
+    await loadMessages(myId, partnerId);
+
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  }
+
+  // ==========================
+  // Upload Audio
+  // ==========================
+  async function uploadAudio(audioBlob: Blob) {
+    if (!myId || !partnerId) return;
+
+    setUploading(true);
+
+    const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.webm`;
+
+    const { error: uploadError } = await supabase.storage
+      .from("chat-audio")
+      .upload(fileName, audioBlob);
+
+    if (uploadError) {
+      setUploading(false);
+      alert(uploadError.message);
+      return;
+    }
+const expiresAt = disappearAfter
+  ? new Date(Date.now() + disappearAfter * 1000).toISOString()
+  : null;
+ const { error } = await supabase
+  .from("messages")
+  .insert({
+    sender_id: myId,
+    receiver_id: partnerId,
+    message: "",
+    image_url: null,
+    audio_url: fileName,
+    video_url: null,
+    view_once: viewOnce,
+    reply_to_id: replyTo?.id ?? null,
+    seen: false,
+    disappear_after: disappearAfter,
+    expires_at: expiresAt,
+  });
+
+    setUploading(false);
+    setReplyTo(null);
+
+    if (error) {
+      alert(error.message);
+      return;
+    }
+
+    await loadMessages(myId, partnerId);
+  }
+
+  // ==========================
+  // Voice Recording
+  // ==========================
+  async function startRecording() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream);
+
+      mediaRecorderRef.current = recorder;
+      audioChunks.current = [];
+
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunks.current.push(event.data);
+        }
+      };
+
+      recorder.onstop = async () => {
+        const audioBlob = new Blob(audioChunks.current, { type: "audio/webm" });
+        stream.getTracks().forEach((track) => track.stop());
+        setRecording(false);
+        await uploadAudio(audioBlob);
+      };
+
+      recorder.start();
+      setRecording(true);
+    } catch (err) {
+      console.error(err);
+      alert("Microphone permission denied.");
+    }
+  }
+
+  function stopRecording() {
+    mediaRecorderRef.current?.stop();
+  }
+
+  // ==========================
+  // Typing
+  // ==========================
+  function handleTyping(value: string) {
+    setText(value);
+
+    supabase.channel(`typing-${partnerId}`).send({
+      type: "broadcast",
+      event: "typing",
+      payload: { user: myId, typing: value.length > 0 },
+    });
+  }
+
+  // ==========================
+  // Reactions
+  // ==========================
+  async function reactToMessage(messageId: string, emoji: string) {
+    const target = messages.find((m) => m.id === messageId);
+    const nextReaction = target?.reaction === emoji ? null : emoji;
+
+    const { error } = await supabase
+      .from("messages")
+      .update({ reaction: nextReaction })
+      .eq("id", messageId);
+
+    if (!error) {
+      await loadMessages(myId, partnerId);
+    }
+  }
+
+  // ==========================
+  // Reply / Edit / Copy / Delete
+  // ==========================
+  function startReply(msg: Message) {
+    setReplyTo(msg);
+    setEditingMessage(null);
+    setMenuFor(null);
+    inputRef.current?.focus();
+  }
+
+  function startEdit(msg: Message) {
+    setEditingMessage(msg);
+    setText(msg.message);
+    setReplyTo(null);
+    setMenuFor(null);
+    inputRef.current?.focus();
+  }
+
+  async function copyMessage(msg: Message) {
+    if (!msg.message) return;
+    try {
+      await navigator.clipboard.writeText(msg.message);
+    } catch (err) {
+      console.error(err);
+    }
+    setMenuFor(null);
+  }
+
+  async function deleteForMe(messageId: string) {
+    const target = messages.find((m) => m.id === messageId);
+    if (!target) return;
+
+    const updated = Array.from(new Set([...(target.deleted_for || []), myId]));
+
+    const { error } = await supabase
+      .from("messages")
+      .update({ deleted_for: updated })
+      .eq("id", messageId);
+
+    setMenuFor(null);
+
+    if (!error) {
+      await loadMessages(myId, partnerId);
+    }
+  }
+
+  async function deleteForEveryone(messageId: string) {
+    const { error } = await supabase
+      .from("messages")
+      .update({
+        deleted_for_everyone: true,
+        message: "",
+        image_url: null,
+        audio_url: null,
+        video_url: null,
+        reaction: null,
+      })
+      .eq("id", messageId);
+
+    setMenuFor(null);
+
+    if (!error) {
+      await loadMessages(myId, partnerId);
+    }
+  }
+  async function uploadVideo(file: File) {
+  if (!myId || !partnerId) return;
 
   setUploading(true);
 
@@ -381,7 +727,7 @@ async function uploadImage(file: File) {
 
   const { error: uploadError } =
     await supabase.storage
-      .from("chat-images")
+      .from("chat-videos")
       .upload(fileName, file);
 
   if (uploadError) {
@@ -389,24 +735,24 @@ async function uploadImage(file: File) {
     alert(uploadError.message);
     return;
   }
-
-  const {
-    data: { publicUrl },
-  } = supabase.storage
-    .from("chat-images")
-    .getPublicUrl(fileName);
+  const expiresAt = disappearAfter
+  ? new Date(Date.now() + disappearAfter * 1000).toISOString()
+  : null;
 
   const { error } = await supabase
-    .from("messages")
-    .insert({
-      sender_id: myId,
-      receiver_id: partnerId,
-      message: "",
-      image_url: publicUrl,
-      audio_url: null,
-      seen: false,
-    });
-
+  .from("messages")
+  .insert({
+    sender_id: myId,
+    receiver_id: partnerId,
+    message: "",
+    image_url: null,
+    audio_url: null,
+    video_url: fileName,
+    view_once: viewOnce,
+    disappear_after: disappearAfter,
+    expires_at: expiresAt,
+    seen: false,
+  });
   setUploading(false);
 
   if (error) {
@@ -414,434 +760,528 @@ async function uploadImage(file: File) {
     return;
   }
 
-  await loadMessages(myId, partnerId);
-
-  if (fileInputRef.current) {
-    fileInputRef.current.value = "";
-  }
+  loadMessages(myId, partnerId);
 }
-// ==========================
-// Upload Audio
-// ==========================
-async function uploadAudio(audioBlob: Blob) {
-  if (!myId || !partnerId) return;
 
-  setUploading(true);
-
-  const fileName = `${Date.now()}-${Math.random()
-    .toString(36)
-    .substring(2)}.webm`;
-
-  const { error: uploadError } = await supabase.storage
-    .from("chat-audio")
-    .upload(fileName, audioBlob);
-
-  if (uploadError) {
-    setUploading(false);
-    alert(uploadError.message);
-    return;
+  function addEmoji(emojiData: any) {
+    setText((prev) => prev + emojiData.emoji);
+    setShowEmoji(false);
   }
 
-  const {
-    data: { publicUrl },
-  } = supabase.storage
-    .from("chat-audio")
-    .getPublicUrl(fileName);
-
-  const { error } = await supabase
-    .from("messages")
-    .insert({
-      sender_id: myId,
-      receiver_id: partnerId,
-      message: "",
-      image_url: null,
-      audio_url: publicUrl,
-      seen: false,
-    });
-
-  setUploading(false);
-
-  if (error) {
-    alert(error.message);
-    return;
+  function scrollToMessage(id: string) {
+    const el = messageRefs.current[id];
+    if (!el) return;
+    el.scrollIntoView({ behavior: "smooth", block: "center" });
+    el.classList.add("ring-2", "ring-pink-400");
+    setTimeout(() => el.classList.remove("ring-2", "ring-pink-400"), 1200);
   }
 
-  await loadMessages(myId, partnerId);
-}
+  // ==========================
+  // Derived: visible + searched messages
+  // ==========================
+  const visibleMessages = messages.filter(
+    (m) => !(m.deleted_for || []).includes(myId)
+  );
 
-// ==========================
-// Start Recording
-// ==========================
-async function startRecording() {
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({
-      audio: true,
-    });
+  const displayedMessages = searchQuery.trim()
+    ? visibleMessages.filter((m) =>
+        m.message?.toLowerCase().includes(searchQuery.trim().toLowerCase())
+      )
+    : visibleMessages;
 
-    const recorder = new MediaRecorder(stream);
+  return (
+    <main className="min-h-screen bg-zinc-950 text-white flex flex-col">
+      {/* Header */}
+      <header className="border-b border-zinc-800 p-4 flex items-center justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold text-pink-500">
+            ❤️ {partnerName || "Private Chat"}
+          </h1>
 
-    mediaRecorderRef.current = recorder;
-    audioChunks.current = [];
-
-    recorder.ondataavailable = (event) => {
-      if (event.data.size > 0) {
-        audioChunks.current.push(event.data);
-      }
-    };
-
-    recorder.onstop = async () => {
-      const audioBlob = new Blob(audioChunks.current, {
-        type: "audio/webm",
-      });
-
-      stream.getTracks().forEach((track) => track.stop());
-
-      setRecording(false);
-
-      await uploadAudio(audioBlob);
-    };
-
-    recorder.start();
-    setRecording(true);
-
-  } catch (err) {
-    console.error(err);
-    alert("Microphone permission denied.");
-  }
-}
-
-// ==========================
-// Stop Recording
-// ==========================
-function stopRecording() {
-  mediaRecorderRef.current?.stop();
-}
-
-// ==========================
-// Typing
-// ==========================
-function handleTyping(value: string) {
-  setText(value);
-
-  supabase
-    .channel(`typing-${partnerId}`)
-    .send({
-      type: "broadcast",
-      event: "typing",
-      payload: {
-        user: myId,
-        typing: value.length > 0,
-      },
-    });
-}
-async function reactToMessage(
-  messageId: string,
-  emoji: string
-) {
-  const { error } = await supabase
-    .from("messages")
-    .update({
-      reaction: emoji,
-    })
-    .eq("id", messageId);
-
-  if (!error) {
-    await loadMessages(myId, partnerId);
-  }
-}
-function addEmoji(emojiData: any) {
-  setText((prev) => prev + emojiData.emoji);
-  setShowEmoji(false);
-}
-return (
-  <main className="min-h-screen bg-zinc-950 text-white flex flex-col">
-
-    {/* Header */}
-    <header className="border-b border-zinc-800 p-5">
-
-      <h1 className="text-3xl font-bold text-pink-500">
-        ❤️ {partnerName || "Private Chat"}
-      </h1>
-
-      <p className="text-sm text-zinc-400">
-        {typing ? (
-          <span className="text-green-400">✍️ Typing...</span>
-        ) : online ? (
-          <span className="text-green-400">🟢 Online</span>
-        ) : lastSeen ? (
-          <>Last seen {new Date(lastSeen).toLocaleString()}</>
-        ) : (
-          "Offline"
-        )}
-      </p>
-      <div className="relative">
-        <button
-          onClick={() => setShowEmoji(!showEmoji)}
-          className="text-zinc-400 hover:text-white transition"
-        >
-          <Smile className="w-5 h-5" />
-        </button>
-
-        {showEmoji && (
-          <div className="absolute bottom-full right-0 mb-2 bg-zinc-800 border border-zinc-600 rounded-lg p-2">
-            {["😊", "😂", "😍", "🥰", "😘", "😗", "😙", "😚"].map((emoji) => (
-              <button
-                key={emoji}
-                onClick={() => addEmoji({ emoji })}
-                className="text-xl hover:bg-zinc-600 rounded p-1"
-              >
-                {emoji}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-    </header>
-    
-
-    {/* Messages */}
-    <div className="flex-1 overflow-y-auto p-6">
-
-      {messages.length === 0 ? (
-
-        <div className="text-center text-zinc-500 mt-20">
-          No messages yet ❤️
+          <p className="text-sm text-zinc-400">
+            {typing ? (
+              <span className="text-green-400">✍️ Typing...</span>
+            ) : online ? (
+              <span className="text-green-400">🟢 Online</span>
+            ) : lastSeen ? (
+              <>Last seen {new Date(lastSeen).toLocaleString()}</>
+            ) : (
+              "Offline"
+            )}
+          </p>
         </div>
 
-      ) : (
-
-        messages.map((msg) => (
-
-          <div
-            key={msg.id}
-            className={`mb-4 flex ${
-              msg.sender_id === myId
-                ? "justify-end"
-                : "justify-start"
-            }`}
-          >
-
-  <div
-  onContextMenu={(e) => {
-    e.preventDefault();
-    setReactionFor(msg.id);
-  }}
-  className={`relative max-w-[75%] rounded-2xl px-4 py-3 ${
-    msg.sender_id === myId
-      ? "bg-pink-600"
-      : "bg-zinc-800"
-  }`}
->
-              {msg.image_url && (
-                <img
-                  src={msg.image_url}
-                  alt="Chat"
-                  className="rounded-xl mb-2 max-w-full cursor-pointer hover:opacity-90 transition"
-                  onClick={() => setPreviewImage(msg.image_url!)}
-                />
-              )}
-
-              {msg.audio_url && (
-                <audio
-                  controls
-                  className="w-full mb-2"
-                >
-                  <source
-                    src={msg.audio_url}
-                    type="audio/webm"
-                  />
-                </audio>
-              )}
-
-              {msg.message && (
-                <p className="break-words">
-                  {msg.message}
-                </p>
-              )}
-
-              <div className="flex justify-end items-center gap-2 mt-2 text-xs opacity-70">
-
-                <span>
-                  {new Date(msg.created_at).toLocaleTimeString([], {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })}
-                </span>
-
-                {msg.sender_id === myId && (
-                  <span className="font-bold">
-                    {msg.seen ? "✓✓" : "✓"}
-                  </span>
-                )}
-                {msg.reaction && (
-  <div className="mt-2 text-lg">
-    {msg.reaction}
-  </div>
-)}
-
-              </div>
-
-            </div>
-
-          </div>
-
-        ))
-
-      )}
-
-      <div ref={bottomRef}></div>
-
-    </div>
-    {reactionFor === msg.id && (
-
-<div className="absolute -top-12 left-0 bg-zinc-900 rounded-full shadow-xl px-2 py-1 flex gap-1 border border-zinc-700 z-50">
-
-{reactions.map((emoji) => (
-
-<button
-key={emoji}
-onClick={()=>{
-reactToMessage(msg.id,emoji);
-setReactionFor(null);
-}}
-className="hover:scale-125 transition text-xl"
->
-{emoji}
-</button>
-
-))}
-
-</div>
-
-)}
-
-    {/* Input */}
-    <div className="relative border-t border-zinc-800 p-4 flex gap-3"></div>
-    {showEmoji && (
-  <div className="absolute bottom-24 left-4 z-50">
-    <EmojiPicker
-      onEmojiClick={addEmoji}
-      theme="dark"
-      height={350}
-      width={300}
-    />
-  </div>
-)}
-    <div className="border-t border-zinc-800 p-4 flex gap-3">
-      
-
-      {/* Hidden File Input */}
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="image/*"
-        hidden
-        onChange={(e) => {
-          if (e.target.files?.[0]) {
-            uploadImage(e.target.files[0]);
-          }
-        }}
-      />
-
-      {/* Image Button */}
-      <button
-        type="button"
-        disabled={uploading}
-        onClick={() => fileInputRef.current?.click()}
-        className="rounded-xl bg-zinc-800 px-4 hover:bg-zinc-700 transition disabled:opacity-50"
-      >
-        <ImagePlus size={22} />
-      </button>
-      <button
-  type="button"
-  onClick={() => setShowEmoji(!showEmoji)}
-  className="rounded-xl bg-zinc-800 px-4 hover:bg-zinc-700 transition"
->
-  <Smile size={22} />
-</button>
-
-      {/* Mic */}
-      {recording ? (
         <button
           type="button"
-          onClick={stopRecording}
-          className="rounded-xl bg-red-600 px-4 hover:bg-red-700 transition"
+          onClick={() => setSearchOpen((v) => !v)}
+          className="rounded-xl bg-zinc-800 p-3 hover:bg-zinc-700 transition"
+          title="Search messages"
         >
-          <Square size={22} />
+          <Search size={20} />
         </button>
-      ) : (
-        <button
-          type="button"
-          onClick={startRecording}
-          className="rounded-xl bg-green-600 px-4 hover:bg-green-700 transition"
-        >
-          <Mic size={22} />
-        </button>
-      )}
+      </header>
 
-      {/* Text */}
-      <input
-        value={text}
-        onChange={(e) => handleTyping(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") {
-            sendMessage();
-          }
-        }}
-        placeholder="Type a message..."
-        className="flex-1 rounded-xl bg-zinc-900 p-4 outline-none"
-      />
-
-      {/* Send */}
-      <button
-        type="button"
-        disabled={uploading}
-        onClick={sendMessage}
-        className="rounded-xl bg-pink-600 px-6 hover:bg-pink-700 transition disabled:opacity-50"
-      >
-        {uploading ? (
-          <Loader2
-            size={22}
-            className="animate-spin"
+      {searchOpen && (
+        <div className="border-b border-zinc-800 p-3">
+          <input
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search messages..."
+            className="w-full rounded-xl bg-zinc-900 p-3 outline-none text-sm"
+            autoFocus
           />
-        ) : (
-          <Send size={22} />
-        )}
-      </button>
+        </div>
+      )}
 
+      {/* Messages */}
+      <div className="flex-1 overflow-y-auto p-6">
+        {displayedMessages.length === 0 ? (
+          <div className="text-center text-zinc-500 mt-20">
+            {searchQuery.trim() ? "No messages found" : "No messages yet ❤️"}
+          </div>
+        ) : (
+          displayedMessages.map((msg) => {
+            const repliedMessage = msg.reply_to_id
+              ? messages.find((m) => m.id === msg.reply_to_id)
+              : null;
+
+            const isMine = msg.sender_id === myId;
+            const diff =
+              Date.now() - new Date(msg.created_at).getTime();
+            const canDeleteForEveryone =
+              diff < 15 * 60 * 1000;
+              const isDeleted = msg.deleted_for_everyone;
+            return (
+              <div
+                key={msg.id}
+                ref={(el) => {
+                  messageRefs.current[msg.id] = el;
+                }}
+                className={`mb-4 flex ${isMine ? "justify-end" : "justify-start"}`}
+              >
+                <div
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (!isDeleted) setMenuFor(msg.id);
+                  }}
+                  className={`relative max-w-[75%] rounded-2xl px-4 py-3 transition ${
+                    isMine ? "bg-pink-600" : "bg-zinc-800"
+                  }`}
+                >
+                  {/* "..." menu trigger */}
+                  {!isDeleted && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setMenuFor(menuFor === msg.id ? null : msg.id);
+                      }}
+                      className="absolute -top-2 -right-2 bg-zinc-900 border border-zinc-700 rounded-full p-1 opacity-70 hover:opacity-100 transition"
+                    >
+                      <MoreVertical size={14} />
+                    </button>
+                  )}
+
+                  {/* Per-message menu */}
+                  {menuFor === msg.id && !isDeleted && (
+  <div
+    onClick={(e) => e.stopPropagation()}
+    className="absolute z-50 top-6 right-0 bg-zinc-900 border border-zinc-700 rounded-xl shadow-xl overflow-hidden w-44 text-sm"
+  >
+    {/* Quick Reactions */}
+    <div className="flex justify-around p-2 border-b border-zinc-700">
+      {QUICK_REACTIONS.map((emoji) => (
+        <button
+          key={emoji}
+          onClick={() => {
+            reactToMessage(msg.id, emoji);
+            setMenuFor(null);
+          }}
+          className="hover:scale-125 transition text-lg"
+        >
+          {emoji}
+        </button>
+      ))}
     </div>
 
-    {/* Image Preview */}
-    {previewImage && (
+    {/* Reply */}
+    <button
+      onClick={() => {
+        startReply(msg);
+        setMenuFor(null);
+      }}
+      className="w-full flex items-center gap-2 px-3 py-2 hover:bg-zinc-800 transition"
+    >
+      <Reply size={16} />
+      Reply
+    </button>
 
-      <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center">
-
-        <button
-          onClick={() => setPreviewImage("")}
-          className="absolute top-5 right-5"
-        >
-          <X size={35} />
-        </button>
-
-        <img
-          src={previewImage}
-          className="max-h-[90vh] max-w-[90vw] rounded-xl"
-        />
-
-        <a
-          href={previewImage}
-          download
-          className="absolute bottom-5 bg-pink-600 px-5 py-3 rounded-xl flex items-center gap-2"
-        >
-          <Download size={20} />
-          Download
-        </a>
-
-      </div>
-
+    {/* Copy */}
+    {msg.message && (
+      <button
+        onClick={() => {
+          copyMessage(msg);
+          setMenuFor(null);
+        }}
+        className="w-full flex items-center gap-2 px-3 py-2 hover:bg-zinc-800 transition"
+      >
+        <Copy size={16} />
+        Copy
+      </button>
     )}
 
-  </main>
-);
+    {/* Edit */}
+    {isMine && msg.message && (
+      <button
+        onClick={() => {
+          startEdit(msg);
+          setMenuFor(null);
+        }}
+        className="w-full flex items-center gap-2 px-3 py-2 hover:bg-zinc-800 transition"
+      >
+        <Pencil size={16} />
+        Edit
+      </button>
+    )}
 
+    {/* Delete for me */}
+    <button
+      onClick={() => {
+        deleteForMe(msg.id);
+        setMenuFor(null);
+      }}
+      className="w-full flex items-center gap-2 px-3 py-2 hover:bg-zinc-800 transition text-red-400"
+    >
+      <Trash2 size={16} />
+      Delete for me
+    </button>
+
+    {/* Delete for everyone (15 min) */}
+    {isMine && canDeleteForEveryone && (
+      <button
+        onClick={() => {
+          deleteForEveryone(msg.id);
+          setMenuFor(null);
+        }}
+        className="w-full flex items-center gap-2 px-3 py-2 hover:bg-zinc-800 transition text-red-400"
+      >
+        <Trash2 size={16} />
+        Delete for everyone
+      </button>
+    )}
+  </div>
+)}
+
+                  {/* Reply preview quoted inside bubble */}
+                  {repliedMessage && !isDeleted && (
+                    <button
+                      onClick={() => scrollToMessage(repliedMessage.id)}
+                      className="block w-full text-left mb-2 px-2 py-1 rounded-lg bg-black/20 border-l-2 border-pink-300 text-xs text-zinc-200 truncate"
+                    >
+                      {repliedMessage.deleted_for_everyone
+                        ? "Original message deleted"
+                        : repliedMessage.message ||
+                          (repliedMessage.image_url
+                            ? "📷 Photo"
+                            : repliedMessage.audio_url
+                            ? "🎤 Voice message"
+                            : "Message")}
+                    </button>
+                  )}
+
+                  {isDeleted ? (
+                    <p className="italic text-zinc-400 text-sm">
+                      This message was deleted
+                    </p>
+                  ) : (
+                    <>
+                      {msg.image_url && (
+  <img
+    src={msg.image_url}
+    alt="Chat"
+    className="rounded-xl mb-2 max-w-full cursor-pointer hover:opacity-90 transition"
+    onClick={() => {
+      setPreviewImage(msg.image_url!);
+      setPreviewImageMessage(msg);
+    }}
+  />
+)}
+
+{msg.video_url && (
+  <video
+    controls
+    className="rounded-xl mb-2 max-w-full"
+  >
+    <source
+      src={msg.video_url}
+      type="video/mp4"
+    />
+  </video>
+)}
+{msg.audio_url && (
+  <audio controls className="w-full mb-2">
+    <source
+      src={msg.audio_url}
+      type="audio/webm"
+    />
+  </audio>
+)}
+
+{msg.message && (
+  <p className="break-words">
+    {msg.message}
+  </p>
+)}
+                    </>
+                  )}
+
+                <div className="flex justify-end items-center gap-2 mt-2 text-xs opacity-70">
+
+  {msg.edited && !isDeleted && (
+    <span>edited</span>
+  )}
+
+  {msg.expires_at && !isDeleted && (
+    <Clock3
+      size={13}
+      className="text-yellow-400"
+      title="Disappearing message"
+    />
+  )}
+
+  <span>
+    {new Date(msg.created_at).toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+    })}
+  </span>
+
+  {isMine && (
+    <span className="font-bold">
+      {msg.status === "sending" && <span>⏳</span>}
+      {msg.status === "sent" && <span>✓</span>}
+      {msg.status === "delivered" && <span>✓✓</span>}
+      {msg.status === "seen" && (
+        <span className="text-blue-400">✓✓</span>
+      )}
+    </span>
+  )}
+
+</div>
+                  {msg.reaction && !isDeleted && (
+                    <div className="mt-1 text-lg">{msg.reaction}</div>
+                  )}
+                </div>
+              </div>
+            );
+          })
+        )}
+
+        <div ref={bottomRef}></div>
+      </div>
+
+      {/* Reply / Edit preview bar above input */}
+      {(replyTo || editingMessage) && (
+        <div className="border-t border-zinc-800 px-4 pt-3 flex items-start justify-between gap-3 bg-zinc-900">
+          <div className="flex-1 min-w-0">
+            <p className="text-xs text-pink-400 font-semibold">
+              {editingMessage ? "Editing message" : `Replying to ${replyTo?.sender_id === myId ? "yourself" : partnerName}`}
+            </p>
+            <p className="text-sm text-zinc-300 truncate">
+              {editingMessage
+                ? editingMessage.message
+                : replyTo?.message ||
+                  (replyTo?.image_url ? "📷 Photo" : replyTo?.audio_url ? "🎤 Voice message" : "")}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={editingMessage ? cancelEdit : cancelReply}
+            className="text-zinc-400 hover:text-white transition mt-1"
+          >
+            <X size={18} />
+          </button>
+        </div>
+      )}
+
+      {/* Input */}
+      <div className="relative border-t border-zinc-800 p-4 flex gap-3 items-center">
+        {/* Hidden File Input */}
+        <input
+    ref={fileInputRef}
+    hidden
+    type="file"
+    accept="image/*,video/*"
+    onChange={(e)=>{
+
+        const file=e.target.files?.[0];
+
+        if(!file) return;
+
+        if(file.type.startsWith("image")){
+
+            uploadImage(file);
+
+        }else if(file.type.startsWith("video")){
+
+            uploadVideo(file);
+
+        }
+
+    }}
+/>
+
+        {!editingMessage && (
+          <button
+            type="button"
+            disabled={uploading}
+            onClick={() => fileInputRef.current?.click()}
+            className="rounded-xl bg-zinc-800 px-4 py-3 hover:bg-zinc-700 transition disabled:opacity-50"
+          >
+            <ImagePlus size={22} />
+          </button>
+        )}
+        <label className="flex items-center gap-2 text-xs whitespace-nowrap">
+  <input
+    type="checkbox"
+    checked={viewOnce}
+    onChange={(e) => setViewOnce(e.target.checked)}
+  />
+  👁 View Once
+</label>
+
+        <div className="relative">
+          <button
+            type="button"
+            onClick={() => setShowEmoji((v) => !v)}
+            className="rounded-xl bg-zinc-800 px-4 py-3 hover:bg-zinc-700 transition"
+          >
+            <Smile size={22} />
+          </button>
+
+          {showEmoji && (
+            <div className="absolute bottom-full mb-2 left-0 z-50">
+              <EmojiPicker onEmojiClick={addEmoji} theme={"dark" as any} height={350} width={300} />
+            </div>
+          )}
+        </div>
+        <div className="relative">
+  <select
+    value={disappearAfter ?? ""}
+    onChange={(e) =>
+      setDisappearAfter(
+        e.target.value ? Number(e.target.value) : null
+      )
+    }
+    className="rounded-xl bg-zinc-800 px-3 py-3 text-sm outline-none"
+  >
+    <option value="">♾️ Off</option>
+    <option value="3600">🕐 1 Hour</option>
+    <option value="86400">📅 24 Hours</option>
+    <option value="604800">🗓️ 7 Days</option>
+  </select>
+</div>
+
+        {!editingMessage &&
+          (recording ? (
+            <button
+              type="button"
+              onClick={stopRecording}
+              className="rounded-xl bg-red-600 px-4 py-3 hover:bg-red-700 transition"
+            >
+              <Square size={22} />
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={startRecording}
+              className="rounded-xl bg-green-600 px-4 py-3 hover:bg-green-700 transition"
+            >
+              <Mic size={22} />
+            </button>
+          ))}
+
+        <input
+          ref={inputRef}
+          value={text}
+          onChange={(e) => handleTyping(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              editingMessage ? saveEditedMessage() : sendMessage();
+            }
+            if (e.key === "Escape") {
+              editingMessage ? cancelEdit() : cancelReply();
+            }
+          }}
+          placeholder={editingMessage ? "Edit message..." : "Type a message..."}
+          className="flex-1 rounded-xl bg-zinc-900 p-4 outline-none"
+        />
+
+        <button
+          type="button"
+          disabled={uploading}
+          onClick={editingMessage ? saveEditedMessage : sendMessage}
+          className="rounded-xl bg-pink-600 px-6 py-3 hover:bg-pink-700 transition disabled:opacity-50"
+        >
+          {uploading ? (
+            <Loader2 size={22} className="animate-spin" />
+          ) : editingMessage ? (
+            <Check size={22} />
+          ) : (
+            <Send size={22} />
+          )}
+        </button>
+      </div>
+
+      {/* Image Preview */}
+      {previewImage && (
+        <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center">
+          <button
+  onClick={async () => {
+    if (
+      previewImageMessage?.view_once &&
+      previewImageMessage.sender_id !== myId
+    ) {
+      const viewed = [
+        ...(previewImageMessage.viewed_by || []),
+        myId,
+      ];
+
+      await supabase
+        .from("messages")
+        .update({
+          viewed_by: viewed,
+          deleted_for: [
+            ...(previewImageMessage.deleted_for || []),
+            myId,
+          ],
+        })
+        .eq("id", previewImageMessage.id);
+
+      await loadMessages(myId, partnerId);
+    }
+
+    setPreviewImage("");
+    setPreviewImageMessage(null);
+  }}
+  className="absolute top-5 right-5"
+>
+  <X size={35} />
+</button>
+
+          <img src={previewImage} className="max-h-[90vh] max-w-[90vw] rounded-xl" />
+
+          <a
+            href={previewImage}
+            download
+            className="absolute bottom-5 bg-pink-600 px-5 py-3 rounded-xl flex items-center gap-2"
+          >
+            <Download size={20} />
+            Download
+          </a>
+        </div>
+      )}
+    </main>
+  );
 }
