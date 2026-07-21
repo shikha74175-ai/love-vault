@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 export default function Home() {
   return (
     <main className="min-h-screen bg-gradient-to-br from-pink-500 via-purple-600 to-indigo-700 text-white">
@@ -12,13 +14,19 @@ export default function Home() {
         </p>
 
         <div className="flex flex-wrap justify-center gap-4">
-          <button className="rounded-xl bg-white px-8 py-3 font-semibold text-pink-600 shadow-lg transition hover:scale-105">
+          <Link
+            href="/login"
+            className="rounded-xl bg-white px-8 py-3 font-semibold text-pink-600 shadow-lg transition hover:scale-105"
+          >
             Login
-          </button>
+          </Link>
 
-          <button className="rounded-xl border border-white px-8 py-3 font-semibold transition hover:bg-white hover:text-pink-600">
+          <Link
+            href="/signup"
+            className="rounded-xl border border-white px-8 py-3 font-semibold transition hover:bg-white hover:text-pink-600"
+          >
             Sign Up
-          </button>
+          </Link>
         </div>
 
         <div className="mt-16 grid w-full max-w-5xl gap-6 md:grid-cols-3">
