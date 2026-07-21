@@ -50,6 +50,10 @@ type Message = {
 
   seen: boolean;
   status?: "sending" | "sent" | "delivered" | "seen";
+
+  // Disappearing messages
+  expires_at?: string | null;
+  disappear_after?: number | null;
 };
 
 const QUICK_REACTIONS = ["❤️", "😂", "😮", "😢", "🙏", "👍"];
@@ -1069,7 +1073,7 @@ const expiresAt = disappearAfter
     <Clock3
       size={13}
       className="text-yellow-400"
-      title="Disappearing message"
+      aria-label="Disappearing message"
     />
   )}
 
