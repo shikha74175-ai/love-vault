@@ -21,6 +21,7 @@ import {
   MoreVertical,
   Check,
   Clock3,
+  Maximize2,
 } from "lucide-react";
 type Message = {
   id: string;
@@ -79,6 +80,11 @@ export default function ChatPage() {
   const [previewImage, setPreviewImage] = useState("");
   const [previewImageMessage, setPreviewImageMessage] =
   useState<Message | null>(null);
+
+  // Video Preview
+  const [previewVideo, setPreviewVideo] = useState("");
+  const [previewVideoMessage, setPreviewVideoMessage] =
+    useState<Message | null>(null);
 
   // Upload Loader
   const [uploading, setUploading] = useState(false);
@@ -220,7 +226,7 @@ export default function ChatPage() {
   useEffect(() => {
   const interval = setInterval(() => {
     setMessages((prev) =>
-      prev.filter((m: any) => {
+      prev.filter((m: Message) => {
         if (!m.expires_at) return true;
         return new Date(m.expires_at).getTime() > Date.now();
       })
@@ -335,6 +341,8 @@ export default function ChatPage() {
     .eq("seen", false);
 
   // Generate signed URLs for private buckets
+  // NOTE: `m` here is the raw row shape returned by Supabase (select("*")),
+  // not yet reshaped into our `Message` type, so `any` is intentional here.
  const processedMessages = await Promise.all(
   (data ?? []).map(async (m: any) => {
     let imageUrl = null;
@@ -392,7 +400,7 @@ export default function ChatPage() {
   })
 );
 
-const visibleMessages = processedMessages.filter((m: any) => {
+const visibleMessages = (processedMessages as Message[]).filter((m: Message) => {
   if (!m.expires_at) return true;
 
   return new Date(m.expires_at).getTime() > Date.now();
@@ -749,11 +757,13 @@ const expiresAt = disappearAfter
     audio_url: null,
     video_url: fileName,
     view_once: viewOnce,
+    reply_to_id: replyTo?.id ?? null,
     disappear_after: disappearAfter,
     expires_at: expiresAt,
     seen: false,
   });
   setUploading(false);
+  setReplyTo(null);
 
   if (error) {
     alert(error.message);
@@ -1009,15 +1019,28 @@ const expiresAt = disappearAfter
 )}
 
 {msg.video_url && (
-  <video
-    controls
-    className="rounded-xl mb-2 max-w-full"
-  >
-    <source
-      src={msg.video_url}
-      type="video/mp4"
-    />
-  </video>
+  <div className="relative mb-2 group">
+    <video
+      controls
+      className="rounded-xl max-w-full"
+    >
+      <source
+        src={msg.video_url}
+        type="video/mp4"
+      />
+    </video>
+    <button
+      type="button"
+      onClick={() => {
+        setPreviewVideo(msg.video_url!);
+        setPreviewVideoMessage(msg);
+      }}
+      className="absolute top-2 right-2 bg-black/60 rounded-lg p-1.5 opacity-0 group-hover:opacity-100 transition"
+      title="Open fullscreen"
+    >
+      <Maximize2 size={16} />
+    </button>
+  </div>
 )}
 {msg.audio_url && (
   <audio controls className="w-full mb-2">
@@ -1237,43 +1260,129 @@ const expiresAt = disappearAfter
       {/* Image Preview */}
       {previewImage && (
         <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center">
-          <button
-  onClick={async () => {
-    if (
-      previewImageMessage?.view_once &&
-      previewImageMessage.sender_id !== myId
-    ) {
-      const viewed = [
-        ...(previewImageMessage.viewed_by || []),
-        myId,
-      ];
+          <div className="absolute top-5 right-5 flex items-center gap-3">
+            {previewImageMessage && !previewImageMessage.deleted_for_everyone && (
+              <>
+                <button
+                  onClick={() => {
+                    startReply(previewImageMessage);
+                    setPreviewImage("");
+                    setPreviewImageMessage(null);
+                  }}
+                  className="bg-zinc-800/80 hover:bg-zinc-700 rounded-xl p-3 transition"
+                  title="Reply"
+                >
+                  <Reply size={22} />
+                </button>
+                <button
+                  onClick={async () => {
+                    await deleteForMe(previewImageMessage.id);
+                    setPreviewImage("");
+                    setPreviewImageMessage(null);
+                  }}
+                  className="bg-zinc-800/80 hover:bg-zinc-700 rounded-xl p-3 transition text-red-400"
+                  title="Delete for me"
+                >
+                  <Trash2 size={22} />
+                </button>
+              </>
+            )}
+            <button
+              onClick={async () => {
+                if (
+                  previewImageMessage?.view_once &&
+                  previewImageMessage.sender_id !== myId
+                ) {
+                  const viewed = [
+                    ...(previewImageMessage.viewed_by || []),
+                    myId,
+                  ];
 
-      await supabase
-        .from("messages")
-        .update({
-          viewed_by: viewed,
-          deleted_for: [
-            ...(previewImageMessage.deleted_for || []),
-            myId,
-          ],
-        })
-        .eq("id", previewImageMessage.id);
+                  await supabase
+                    .from("messages")
+                    .update({
+                      viewed_by: viewed,
+                      deleted_for: [
+                        ...(previewImageMessage.deleted_for || []),
+                        myId,
+                      ],
+                    })
+                    .eq("id", previewImageMessage.id);
 
-      await loadMessages(myId, partnerId);
-    }
+                  await loadMessages(myId, partnerId);
+                }
 
-    setPreviewImage("");
-    setPreviewImageMessage(null);
-  }}
-  className="absolute top-5 right-5"
->
-  <X size={35} />
-</button>
+                setPreviewImage("");
+                setPreviewImageMessage(null);
+              }}
+              className="bg-zinc-800/80 hover:bg-zinc-700 rounded-xl p-3 transition"
+              title="Close"
+            >
+              <X size={22} />
+            </button>
+          </div>
 
           <img src={previewImage} className="max-h-[90vh] max-w-[90vw] rounded-xl" />
 
           <a
             href={previewImage}
+            download
+            className="absolute bottom-5 bg-pink-600 px-5 py-3 rounded-xl flex items-center gap-2"
+          >
+            <Download size={20} />
+            Download
+          </a>
+        </div>
+      )}
+
+      {/* Video Preview */}
+      {previewVideo && (
+        <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center">
+          <div className="absolute top-5 right-5 flex items-center gap-3">
+            {previewVideoMessage && !previewVideoMessage.deleted_for_everyone && (
+              <>
+                <button
+                  onClick={() => {
+                    startReply(previewVideoMessage);
+                    setPreviewVideo("");
+                    setPreviewVideoMessage(null);
+                  }}
+                  className="bg-zinc-800/80 hover:bg-zinc-700 rounded-xl p-3 transition"
+                  title="Reply"
+                >
+                  <Reply size={22} />
+                </button>
+                <button
+                  onClick={async () => {
+                    await deleteForMe(previewVideoMessage.id);
+                    setPreviewVideo("");
+                    setPreviewVideoMessage(null);
+                  }}
+                  className="bg-zinc-800/80 hover:bg-zinc-700 rounded-xl p-3 transition text-red-400"
+                  title="Delete for me"
+                >
+                  <Trash2 size={22} />
+                </button>
+              </>
+            )}
+            <button
+              onClick={() => {
+                setPreviewVideo("");
+                setPreviewVideoMessage(null);
+              }}
+              className="bg-zinc-800/80 hover:bg-zinc-700 rounded-xl p-3 transition"
+              title="Close"
+            >
+              <X size={22} />
+            </button>
+          </div>
+
+          <video controls autoPlay className="max-h-[90vh] max-w-[90vw] rounded-xl">
+            <source src={previewVideo} type="video/mp4" />
+          </video>
+
+          <a
+            href={previewVideo}
             download
             className="absolute bottom-5 bg-pink-600 px-5 py-3 rounded-xl flex items-center gap-2"
           >
