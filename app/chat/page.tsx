@@ -1,9 +1,9 @@
 "use client";
 
+import dynamic from "next/dynamic";
+import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/client";
-import EmojiPicker from "emoji-picker-react";
-
 import {
   Send,
   ImagePlus,
@@ -23,6 +23,14 @@ import {
   Clock3,
   Maximize2,
 } from "lucide-react";
+
+// Must be declared at module scope, not inside the component —
+// calling dynamic() on every render recreates the lazy component
+// and can cause the picker to unmount/remount or flicker.
+const EmojiPicker = dynamic(() => import("emoji-picker-react"), {
+  ssr: false,
+});
+
 type Message = {
   id: string;
   sender_id: string;
@@ -804,15 +812,16 @@ const expiresAt = disappearAfter
     : visibleMessages;
 
   return (
-    <main className="h-dvh bg-zinc-950 text-white flex flex-col overflow-hidden">
+    <main className="h-[100dvh] bg-zinc-950 text-white flex flex-col overflow-hidden overscroll-none">
       {/* Header */}
-      <header className="border-b border-zinc-800 p-4 flex items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold text-pink-500">
-            ❤️ {partnerName || "Private Chat"}
-          </h1>
+<header className="shrink-0 border-b border-zinc-800 
+px-3 py-3 sm:px-4 flex items-center justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <h1 className="text-lg sm:text-2xl font-bold text-pink-500 truncate">
+  ❤️ {partnerName || "Private Chat"}
+</h1>
 
-          <p className="text-sm text-zinc-400">
+          <p className="text-[11px] sm:text-sm text-zinc-400 truncate">
             {typing ? (
               <span className="text-green-400">✍️ Typing...</span>
             ) : online ? (
@@ -828,9 +837,8 @@ const expiresAt = disappearAfter
         <button
           type="button"
           onClick={() => setSearchOpen((v) => !v)}
-          className="rounded-xl bg-zinc-800 p-3 hover:bg-zinc-700 transition"
-          title="Search messages"
-        >
+          className="h-11 w-11 shrink-0 rounded-xl bg-zinc-800 flex items-center justify-center 
+          hover:bg-zinc-700 transition" title="Search messages">
           <Search size={20} />
         </button>
       </header>
@@ -848,7 +856,7 @@ const expiresAt = disappearAfter
       )}
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 min-h-0">
+      <div className="flex-1 overflow-y-auto px-2 py-3 sm:p-4 min-h-0 scrollbar-hide overscroll-contain pb-24">
         {displayedMessages.length === 0 ? (
           <div className="text-center text-zinc-500 mt-20">
             {searchQuery.trim() ? "No messages found" : "No messages yet ❤️"}
@@ -879,9 +887,10 @@ const expiresAt = disappearAfter
                     e.stopPropagation();
                     if (!isDeleted) setMenuFor(msg.id);
                   }}
-                  className={`relative max-w-[75%] rounded-2xl px-4 py-3 transition ${
+                  className={`relative w-fit max-w-[90%] sm:max-w-[80%] lg:max-w-[75%] rounded-2xl 
+                    px-3 sm:px-4 py-2 sm:py-3 transition break-words ${
                     isMine ? "bg-pink-600" : "bg-zinc-800"
-                  }`}
+                    }`}
                 >
                   {/* "..." menu trigger */}
                   {!isDeleted && (
@@ -1011,10 +1020,15 @@ const expiresAt = disappearAfter
                   ) : (
                     <>
                       {msg.image_url && (
-  <img
+  <Image
     src={msg.image_url}
     alt="Chat"
-    className="rounded-xl mb-2 max-w-full cursor-pointer hover:opacity-90 transition"
+    width={500}
+    height={500}
+    sizes="100vw"
+    unoptimized
+    className="rounded-xl mb-2 w-full max-w-xs sm:max-w-sm md:max-w-md 
+    lg:max-w-lg h-auto cursor-pointer object-cover hover:opacity-90 transition select-none"
     onClick={() => {
       setPreviewImage(msg.image_url!);
       setPreviewImageMessage(msg);
@@ -1026,7 +1040,7 @@ const expiresAt = disappearAfter
   <div className="relative mb-2 group">
     <video
       controls
-      className="rounded-xl max-w-full"
+      className="rounded-xl w-full max-w-xs sm:max-w-sm md:max-w-md lg:max-w-lg select-none"
     >
       <source
         src={msg.video_url}
@@ -1047,7 +1061,7 @@ const expiresAt = disappearAfter
   </div>
 )}
 {msg.audio_url && (
-  <audio controls className="w-full mb-2">
+  <audio controls className="w-full max-w-xs sm:max-w-sm mb-2">
     <source
       src={msg.audio_url}
       type="audio/webm"
@@ -1056,14 +1070,14 @@ const expiresAt = disappearAfter
 )}
 
 {msg.message && (
-  <p className="break-words">
+  <p className="break-all text-sm sm:text-base leading-6">
     {msg.message}
   </p>
 )}
                     </>
                   )}
 
-                <div className="flex justify-end items-center gap-2 mt-2 text-xs opacity-70">
+                <div className="flex flex-wrap justify-end items-center gap-1 sm:gap-2 mt-2 text-[10px] sm:text-xs opacity-70">
 
   {msg.edited && !isDeleted && (
     <span>edited</span>
@@ -1133,7 +1147,19 @@ const expiresAt = disappearAfter
       )}
 
       {/* Input */}
-      <div className="shrink-0 border-t border-zinc-800 p-3 flex gap-2 items-center bg-zinc-950">
+   <div className="
+shrink-0
+border-t border-zinc-800
+bg-zinc-950/95
+backdrop-blur-md
+px-2 py-2
+sm:px-3 sm:py-3
+flex items-center gap-2
+overflow-x-auto
+scrollbar-hide
+pb-[max(env(safe-area-inset-bottom),8px)]
+">
+  
         {/* Hidden File Input */}
         <input
     ref={fileInputRef}
@@ -1157,6 +1183,13 @@ const expiresAt = disappearAfter
         }
 
     }}
+    onFocus={()=>{
+setTimeout(()=>{
+bottomRef.current?.scrollIntoView({
+behavior:"smooth"
+})
+},200)
+}}
 />
 
         {!editingMessage && (
@@ -1164,12 +1197,19 @@ const expiresAt = disappearAfter
             type="button"
             disabled={uploading}
             onClick={() => fileInputRef.current?.click()}
-            className="rounded-xl bg-zinc-800 px-4 py-3 hover:bg-zinc-700 transition disabled:opacity-50"
+            className="h-11 w-11 sm:h-12 sm:w-12 shrink-0 rounded-xl bg-zinc-800 hover:bg-zinc-700
+             transition disabled:opacity-50 flex items-center justify-center"
           >
             <ImagePlus size={22} />
           </button>
         )}
-        <label className="flex items-center gap-2 text-xs whitespace-nowrap">
+   <label className="hidden md:flex items-center gap-2 text-xs whitespace-nowrap shrink-0">
+<input
+type="checkbox"
+checked={viewOnce}
+onChange={(e)=>setViewOnce(e.target.checked)}
+/>
+
   <input
     type="checkbox"
     checked={viewOnce}
@@ -1182,14 +1222,27 @@ const expiresAt = disappearAfter
           <button
             type="button"
             onClick={() => setShowEmoji((v) => !v)}
-            className="rounded-xl bg-zinc-800 px-4 py-3 hover:bg-zinc-700 transition"
+           className="h-11 w-11 sm:h-12 sm:w-12 shrink-0 rounded-xl bg-zinc-800 hover:bg-zinc-700 
+           transition flex items-center justify-center"
           >
             <Smile size={22} />
           </button>
 
           {showEmoji && (
-            <div className="absolute bottom-full mb-2 left-0 z-50">
-              <EmojiPicker onEmojiClick={addEmoji} theme={"dark" as any} height={350} width={300} />
+            <div className="absolute bottom-full mb-2 right-0 sm:left-0 sm:right-auto z-50 
+            scale-90 sm:scale-100 origin-bottom-right">
+              <EmojiPicker
+lazyLoadEmojis
+searchDisabled
+skinTonesDisabled
+previewConfig={{
+showPreview:false
+}}
+height={320}
+width={280}
+theme={"dark" as any}
+onEmojiClick={addEmoji}
+ />
             </div>
           )}
         </div>
@@ -1201,7 +1254,7 @@ const expiresAt = disappearAfter
         e.target.value ? Number(e.target.value) : null
       )
     }
-    className="rounded-xl bg-zinc-800 px-3 py-3 text-sm outline-none"
+    className="hidden sm:block rounded-xl bg-zinc-800 px-2 py-3 text-xs outline-none shrink-0"
   >
     <option value="">♾️ Off</option>
     <option value="3600">🕐 1 Hour</option>
@@ -1215,7 +1268,8 @@ const expiresAt = disappearAfter
             <button
               type="button"
               onClick={stopRecording}
-              className="rounded-xl bg-red-600 px-4 py-3 hover:bg-red-700 transition"
+              className="h-11 w-11 sm:h-12 sm:w-12 shrink-0 rounded-xl bg-red-600 
+              hover:bg-red-700 transition flex items-center justify-center"
             >
               <Square size={22} />
             </button>
@@ -1223,7 +1277,8 @@ const expiresAt = disappearAfter
             <button
               type="button"
               onClick={startRecording}
-              className="rounded-xl bg-green-600 px-4 py-3 hover:bg-green-700 transition"
+              className="h-11 w-11 sm:h-12 sm:w-12 shrink-0 rounded-xl bg-green-600 hover:bg-green-700 
+              transition flex items-center justify-center"
             >
               <Mic size={22} />
             </button>
@@ -1242,14 +1297,15 @@ const expiresAt = disappearAfter
             }
           }}
           placeholder={editingMessage ? "Edit message..." : "Type a message..."}
-          className="flex-1 rounded-xl bg-zinc-900 p-4 outline-none"
+         className="flex-1 min-w-0 rounded-xl bg-zinc-900 px-3 py-3 text-sm sm:text-base outline-none"
         />
 
         <button
           type="button"
           disabled={uploading}
           onClick={editingMessage ? saveEditedMessage : sendMessage}
-          className="rounded-xl bg-pink-600 px-6 py-3 hover:bg-pink-700 transition disabled:opacity-50"
+        className="h-11 w-11 sm:h-12 sm:w-12 shrink-0 rounded-xl bg-pink-600 hover:bg-pink-700 
+        transition disabled:opacity-50 flex items-center justify-center"
         >
           {uploading ? (
             <Loader2 size={22} className="animate-spin" />
@@ -1326,12 +1382,19 @@ const expiresAt = disappearAfter
             </button>
           </div>
 
-          <img src={previewImage} className="max-h-[90vh] max-w-[90vw] rounded-xl" />
+          <Image
+            src={previewImage}
+            alt="Preview"
+            width={1200}
+            height={1200}
+            unoptimized
+            className="max-h-[85vh] max-w-[96vw] sm:max-h-[90vh] sm:max-w-[90vw] object-contain rounded-xl"
+          />
 
           <a
             href={previewImage}
             download
-            className="absolute bottom-5 bg-pink-600 px-5 py-3 rounded-xl flex items-center gap-2"
+           className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-pink-600 hover:bg-pink-700 transition px-4 py-2 sm:px-5 sm:py-3 rounded-xl flex items-center gap-2 text-sm sm:text-base"
           >
             <Download size={20} />
             Download
@@ -1341,58 +1404,64 @@ const expiresAt = disappearAfter
 
       {/* Video Preview */}
       {previewVideo && (
-        <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center">
-          <div className="absolute top-5 right-5 flex items-center gap-3">
-            {previewVideoMessage && !previewVideoMessage.deleted_for_everyone && (
-              <>
-                <button
-                  onClick={() => {
-                    startReply(previewVideoMessage);
-                    setPreviewVideo("");
-                    setPreviewVideoMessage(null);
-                  }}
-                  className="bg-zinc-800/80 hover:bg-zinc-700 rounded-xl p-3 transition"
-                  title="Reply"
-                >
-                  <Reply size={22} />
-                </button>
-                <button
-                  onClick={async () => {
-                    await deleteForMe(previewVideoMessage.id);
-                    setPreviewVideo("");
-                    setPreviewVideoMessage(null);
-                  }}
-                  className="bg-zinc-800/80 hover:bg-zinc-700 rounded-xl p-3 transition text-red-400"
-                  title="Delete for me"
-                >
-                  <Trash2 size={22} />
-                </button>
-              </>
-            )}
+         <div className="fixed inset-0 z-50 bg-black/95 flex items-center justify-center p-3">
+    <div className="absolute top-4 right-4 flex items-center gap-2 sm:gap-3">
+            {previewVideoMessage &&
+        !previewVideoMessage.deleted_for_everyone && (
+          <>
             <button
               onClick={() => {
+                startReply(previewVideoMessage);
                 setPreviewVideo("");
                 setPreviewVideoMessage(null);
               }}
-              className="bg-zinc-800/80 hover:bg-zinc-700 rounded-xl p-3 transition"
-              title="Close"
+              className="bg-zinc-800/80 hover:bg-zinc-700 rounded-xl p-2 sm:p-3 transition"
+              title="Reply"
             >
-              <X size={22} />
+              <Reply size={20} />
             </button>
+                 <button
+              onClick={async () => {
+                await deleteForMe(previewVideoMessage.id);
+                setPreviewVideo("");
+                setPreviewVideoMessage(null);
+              }}
+              className="bg-zinc-800/80 hover:bg-zinc-700 rounded-xl p-2 sm:p-3 transition text-red-400"
+              title="Delete for me"
+            >
+              <Trash2 size={20} />
+            </button>
+          </>
+        )}
+            <button
+        onClick={() => {
+          setPreviewVideo("");
+          setPreviewVideoMessage(null);
+        }}
+        className="bg-zinc-800/80 hover:bg-zinc-700 rounded-xl p-2 sm:p-3 transition"
+        title="Close"
+      >
+        <X size={20} />
+      </button>
           </div>
 
-          <video controls autoPlay className="max-h-[90vh] max-w-[90vw] rounded-xl">
-            <source src={previewVideo} type="video/mp4" />
-          </video>
+         <video
+      controls
+      autoPlay
+      className="max-h-[85vh] max-w-[96vw] sm:max-h-[90vh] sm:max-w-[90vw] object-contain rounded-xl"
+    >
+      <source src={previewVideo} type="video/mp4" />
+    </video>
+
 
           <a
-            href={previewVideo}
-            download
-            className="absolute bottom-5 bg-pink-600 px-5 py-3 rounded-xl flex items-center gap-2"
-          >
-            <Download size={20} />
-            Download
-          </a>
+      href={previewVideo}
+      download
+      className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-pink-600 hover:bg-pink-700 transition px-4 py-2 sm:px-5 sm:py-3 rounded-xl flex items-center gap-2 text-sm sm:text-base"
+    >
+      <Download size={18} />
+      Download
+    </a>
         </div>
       )}
     </main>
