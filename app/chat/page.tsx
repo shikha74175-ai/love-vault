@@ -804,7 +804,7 @@ const expiresAt = disappearAfter
     : visibleMessages;
 
   return (
-    <main className="min-h-screen bg-zinc-950 text-white flex flex-col">
+    <main className="h-dvh bg-zinc-950 text-white flex flex-col overflow-hidden">
       {/* Header */}
       <header className="border-b border-zinc-800 p-4 flex items-center justify-between gap-3">
         <div>
@@ -848,7 +848,7 @@ const expiresAt = disappearAfter
       )}
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-6">
+      <div className="flex-1 overflow-y-auto p-4 min-h-0">
         {displayedMessages.length === 0 ? (
           <div className="text-center text-zinc-500 mt-20">
             {searchQuery.trim() ? "No messages found" : "No messages yet ❤️"}
@@ -1133,7 +1133,7 @@ const expiresAt = disappearAfter
       )}
 
       {/* Input */}
-      <div className="relative border-t border-zinc-800 p-4 flex gap-3 items-center">
+      <div className="shrink-0 border-t border-zinc-800 p-3 flex gap-2 items-center bg-zinc-950">
         {/* Hidden File Input */}
         <input
     ref={fileInputRef}
