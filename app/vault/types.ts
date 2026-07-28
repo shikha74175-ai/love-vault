@@ -1,38 +1,23 @@
 export type VaultType =
-  | "shared"
-  | "private"
-  | "photo"
+  | "image"
   | "video"
   | "audio"
-  | "document"
-  | "note"
-  | "favorite"
-  | "trash";
+  | "document";
 
 export interface VaultItem {
   id: string;
 
-  owner_id: string;
+  file_name: string;
 
-  partner_id: string | null;
+  file_type: "image" | "video" | "audio" | "document";
 
-  type: "photo" | "video" | "audio" | "document" | "note";
+  favorite: boolean;
 
-  title: string;
+  visibility: "private" | "shared";
 
-  description?: string;
-
-  file_url: string | null;
-
-  thumbnail_url?: string | null;
-
-  is_private: boolean;
-
-  is_favorite: boolean;
-
-  deleted: boolean;
+  folder: string | null;
 
   created_at: string;
 
-  updated_at?: string;
+  signedUrl: string;
 }

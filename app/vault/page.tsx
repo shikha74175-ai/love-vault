@@ -76,6 +76,8 @@ console.log("PAGE USER:", user);
           file.storage_path,
           60 * 60
         );
+        console.log("PATH:", file.storage_path);
+console.log("SIGNED:", signed?.signedUrl);
 
     result.push({
 

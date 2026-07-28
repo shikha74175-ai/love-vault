@@ -1,12 +1,19 @@
 "use client";
 
 import Image from "next/image";
-import { Heart, Lock, Users, FileText, Video, Music } from "lucide-react";
+import {
+  Heart,
+  Lock,
+  Users,
+  FileText,
+  Video,
+  Music,
+} from "lucide-react";
 
 export type VaultItem = {
   id: string;
   file_name: string;
-  file_type: string;
+  file_type: "image" | "video" | "audio" | "document";
   signedUrl: string;
   favorite: boolean;
   visibility: "private" | "shared";
@@ -62,33 +69,30 @@ export default function VaultGrid({
           border
           border-zinc-800
           hover:border-pink-500
-          transition
+          hover:scale-[1.02]
+          transition-all
+          duration-300
           text-left
           "
         >
           {/* IMAGE */}
 
           {item.file_type === "image" && (
-            <Image
-              src={item.signedUrl}
-              alt={item.file_name}
-              width={500}
-              height={500}
-              className="
-              w-full
-              aspect-square
-              object-cover
-              "
-              unoptimized
-            />
+            <img
+  src={item.signedUrl}
+  alt={item.file_name}
+  className="w-full aspect-square object-cover"
+/>
           )}
 
           {/* VIDEO */}
 
           {item.file_type === "video" && (
-            <div className="aspect-square flex items-center justify-center bg-zinc-800">
-              <Video size={45} />
-            </div>
+            <video
+              src={item.signedUrl}
+              className="w-full aspect-square object-cover"
+              muted
+            />
           )}
 
           {/* AUDIO */}
@@ -107,7 +111,7 @@ export default function VaultGrid({
             </div>
           )}
 
-          {/* BADGES */}
+          {/* TOP BADGES */}
 
           <div className="absolute top-2 left-2 flex gap-2">
 
@@ -115,7 +119,7 @@ export default function VaultGrid({
               <div className="bg-pink-600 rounded-full p-1">
                 <Heart
                   size={14}
-                  className="fill-white"
+                  className="fill-white text-white"
                 />
               </div>
             )}
@@ -135,22 +139,16 @@ export default function VaultGrid({
 
           <div className="p-3">
 
-            <p className="font-medium truncate">
+            <p className="truncate font-medium">
               {item.file_name}
             </p>
 
             <p className="text-xs text-zinc-400 mt-1">
-
               {item.folder || "No Folder"}
-
             </p>
 
             <p className="text-xs text-zinc-500 mt-1">
-
-              {new Date(
-                item.created_at
-              ).toLocaleDateString()}
-
+              {new Date(item.created_at).toLocaleDateString()}
             </p>
 
           </div>

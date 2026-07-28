@@ -37,7 +37,7 @@ export default function VaultCard({ item }: Props) {
 
           {isImage && (
             <Image
-              src={item.url}
+             src={item.signedUrl}
               alt={item.file_name}
               fill
               unoptimized
@@ -48,7 +48,7 @@ export default function VaultCard({ item }: Props) {
           {isVideo && (
             <>
               <video
-                src={item.url}
+                src={item.signedUrl}
                 className="w-full h-full object-cover"
                 muted
               />
