@@ -1,39 +1,72 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/client";
-
 import VaultHeader from "./components/VaultHeader";
 import VaultTabs from "./components/VaultTabs";
 import UploadButton from "./components/UploadButton";
 import VaultGrid, { VaultItem } from "./components/VaultGrid";
+import SearchBar from "./components/SearchBar";
 
 
 
 export default function VaultPage() {
+
+  const router = useRouter();
+
   const [activeTab, setActiveTab] = useState("all");
   const [items, setItems] = useState<VaultItem[]>([]);
+  const [search, setSearch] = useState("");
+  const [usedStorage, setUsedStorage] = useState(0);
+
+
+ const filteredItems = items
+  .filter((item) => {
+    switch (activeTab) {
+      case "photos":
+        return item.file_type === "image";
+
+      case "videos":
+        return item.file_type === "video";
+
+      case "favorites":
+        return item.favorite;
+
+      case "shared":
+        return item.visibility === "shared";
+
+      default:
+        return true;
+    }
+  })
+  .filter((item) => {
+    if (!search) return true;
+
+    return (
+      item.file_name
+        .toLowerCase()
+        .includes(search.toLowerCase()) ||
+
+      (item.folder ?? "")
+        .toLowerCase()
+        .includes(search.toLowerCase())
+    );
+  });
+
 
 useEffect(() => {
   loadVault();
 }, []);
-  async function loadVault() {
 
+async function loadVault() {
   const {
-  data: { user },
-} = await supabase.auth.getUser();
+    data: { user },
+  } = await supabase.auth.getUser();
 
-console.log("PAGE USER:", user);
+  console.log("PAGE USER:", user);
 
   if (!user) return;
-
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("partner_id")
-    .eq("id", user.id)
-    .single();
-
-  const partnerId = profile?.partner_id;
 
   const { data, error } = await supabase
     .from("vault_files")
@@ -47,63 +80,62 @@ console.log("PAGE USER:", user);
     });
 
   if (error) {
-  console.log("SUPABASE ERROR:");
-  console.log(error);
-  alert(error.message);
+    console.error(error);
+    alert(error.message);
+    return;
+  }
 
-  return;
-}
+  // ===========================
+  // Calculate Used Storage
+  // ===========================
+
+  let totalBytes = 0;
 
   const result: VaultItem[] = [];
 
   for (const file of data ?? []) {
 
+    totalBytes += file.file_size ?? 0;
+
     let bucket = "vault-documents";
 
-    if (file.file_type === "image")
+    if (file.file_type === "image") {
       bucket = "vault-images";
-
-    else if (file.file_type === "video")
+    } else if (file.file_type === "video") {
       bucket = "vault-videos";
-
-    else if (file.file_type === "audio")
+    } else if (file.file_type === "audio") {
       bucket = "vault-audio";
+    }
 
-    const { data: signed } =
-      await supabase.storage
-        .from(bucket)
-        .createSignedUrl(
-          file.storage_path,
-          60 * 60
-        );
-        console.log("PATH:", file.storage_path);
-console.log("SIGNED:", signed?.signedUrl);
+    const { data: signed } = await supabase.storage
+      .from(bucket)
+      .createSignedUrl(file.storage_path, 60 * 60);
 
     result.push({
-
       id: file.id,
-
       file_name: file.file_name,
-
       file_type: file.file_type,
-
       favorite: file.favorite,
-
       visibility: file.visibility,
-
       folder: file.folder,
-
       created_at: file.created_at,
-
-      signedUrl:
-        signed?.signedUrl ?? "",
-
+      signedUrl: signed?.signedUrl ?? "",
     });
-
   }
 
-  setItems(result);
+  // ===========================
+  // Update Storage
+  // ===========================
 
+  const usedGB = totalBytes / 1024 / 1024 / 1024;
+
+  setUsedStorage(Number(usedGB.toFixed(2)));
+
+  // ===========================
+  // Update Gallery
+  // ===========================
+
+  setItems(result);
 }
 
   return (
@@ -111,9 +143,9 @@ console.log("SIGNED:", signed?.signedUrl);
 
       {/* Header */}
       <VaultHeader
-        usedStorage={0}
-        totalStorage={5}
-      />
+  usedStorage={usedStorage}
+  totalStorage={5}
+/>
       <VaultTabs
   active={activeTab}
   onChange={setActiveTab}
@@ -125,12 +157,22 @@ console.log("SIGNED:", signed?.signedUrl);
   <div className="mx-auto max-w-7xl">
 
     {/* Upload Button */}
-    <div className="flex justify-end mb-6">
-      <UploadButton onUpload={loadVault} folders={[]} />
-    </div>
+ <div className="flex flex-col sm:flex-row gap-4 justify-between mb-6">
+
+  <SearchBar
+    value={search}
+    onChange={setSearch}
+  />
+
+  <UploadButton
+    onUpload={loadVault}
+    folders={[]}
+  />
+
+</div>
 
     {/* Welcome Card */}
-   {items.length === 0 ? (
+   {filteredItems.length === 0 ? (
 
 <div className="rounded-3xl border border-zinc-800 bg-zinc-900/70 p-10 text-center">
 
@@ -152,10 +194,11 @@ Everything shared here stays between you and your partner.
 ) : (
 
 <VaultGrid
-items={items}
-onOpen={(item)=>console.log(item)}
+  items={filteredItems}
+  onOpen={(item) => {
+    router.push(`/vault/preview?id=${item.id}`);
+  }}
 />
-
 )}
 
     {/* Gallery */}

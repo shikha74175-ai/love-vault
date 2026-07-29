@@ -11,6 +11,7 @@ const tabs = [
   { id: "videos", label: "🎥 Videos" },
   { id: "favorites", label: "❤️ Favorites" },
   { id: "shared", label: "👥 Shared" },
+  { id: "trash", label: "🗑 Trash" },
 ];
 
 export default function VaultTabs({

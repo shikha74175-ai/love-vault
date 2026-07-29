@@ -16,67 +16,153 @@ export default function VaultHeader({
   const percent = Math.min((usedStorage / totalStorage) * 100, 100);
 
   return (
-    <header className="sticky top-0 z-30 backdrop-blur-xl bg-zinc-950/80 border-b border-zinc-800">
+    <header
+      className="
+      sticky top-0 z-40
+      bg-zinc-950/90
+      backdrop-blur-xl
+      border-b border-zinc-800
+      safe-top
+      "
+    >
+      <div
+        className="
+        max-w-7xl
+        mx-auto
+        px-4
+        sm:px-6
+        py-3
+        "
+      >
+        {/* Top Row */}
+        <div className="flex items-center justify-between gap-3">
 
-      <div className="px-4 py-4 flex items-center justify-between">
+          {/* Left */}
 
-        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 min-w-0">
 
-          <div className="w-12 h-12 rounded-2xl bg-pink-600 flex items-center justify-center shadow-lg shadow-pink-600/30">
-            <Heart className="w-6 h-6 text-white fill-white" />
+            <div
+              className="
+              w-11 h-11
+              sm:w-12 sm:h-12
+              rounded-2xl
+              bg-pink-600
+              flex items-center justify-center
+              shrink-0
+              "
+            >
+              <Heart
+                className="text-white fill-white"
+                size={22}
+              />
+            </div>
+
+            <div className="min-w-0">
+
+              <h1
+                className="
+                text-lg
+                sm:text-xl
+                font-bold
+                truncate
+                "
+              >
+                Love Vault
+              </h1>
+
+              <p
+                className="
+                text-[11px]
+                sm:text-xs
+                text-zinc-400
+                truncate
+                "
+              >
+                Private memories together ❤️
+              </p>
+
+            </div>
+
           </div>
 
-          <div>
-            <h1 className="text-xl font-bold text-white">
-              Love Vault
-            </h1>
+          {/* Search */}
 
-            <p className="text-xs text-zinc-400">
-              Private memories together ❤️
-            </p>
-          </div>
+          <button
+            onClick={onSearch}
+            className="
+            w-10 h-10
+            sm:w-11 sm:h-11
+            rounded-xl
+            bg-zinc-900
+            hover:bg-zinc-800
+            flex items-center justify-center
+            shrink-0
+            "
+          >
+            <Search size={20} />
+          </button>
 
         </div>
 
-        <button
-          onClick={onSearch}
-          className="w-11 h-11 rounded-xl bg-zinc-900 hover:bg-zinc-800 transition flex items-center justify-center"
+        {/* Storage */}
+
+        <div
+          className="
+          mt-4
+          rounded-2xl
+          bg-zinc-900
+          border border-zinc-800
+          p-4
+          "
         >
-          <Search className="w-5 h-5" />
-        </button>
+          <div className="flex items-center justify-between mb-3">
 
-      </div>
+            <div className="flex items-center gap-2">
 
-      <div className="px-4 pb-4">
+              <HardDrive
+                size={16}
+                className="text-zinc-400"
+              />
 
-        <div className="rounded-2xl bg-zinc-900 p-4">
+              <span className="text-sm font-medium">
+                Storage
+              </span>
 
-          <div className="flex justify-between text-sm mb-2">
-
-            <div className="flex items-center gap-2 text-zinc-300">
-              <HardDrive size={16} />
-              Storage
             </div>
 
-            <span className="text-zinc-400">
+            <span
+              className="
+              text-[11px]
+              sm:text-sm
+              text-zinc-400
+              "
+            >
               {usedStorage.toFixed(2)} GB / {totalStorage} GB
             </span>
 
           </div>
 
-          <div className="w-full h-3 bg-zinc-800 rounded-full overflow-hidden">
+          <div className="w-full h-2.5 rounded-full bg-zinc-800 overflow-hidden">
 
             <div
-              className="h-full rounded-full bg-gradient-to-r from-pink-500 to-fuchsia-500 transition-all duration-500"
-              style={{ width: `${percent}%` }}
+              className="
+              h-full
+              rounded-full
+              bg-gradient-to-r
+              from-pink-500
+              to-fuchsia-500
+              transition-all
+              duration-500
+              "
+              style={{
+                width: `${percent}%`,
+              }}
             />
 
           </div>
 
         </div>
-
       </div>
-
     </header>
   );
 }
