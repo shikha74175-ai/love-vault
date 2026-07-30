@@ -17,9 +17,11 @@ export type VaultItem = {
   favorite: boolean;
   visibility: "private" | "shared";
   folder: string | null;
+  folder_id: string | null;
   created_at: string;
+  deleted: boolean;
+ deleted_at?: string | null;
 };
-
 type Props = {
   items: VaultItem[];
   onOpen: (item: VaultItem) => void;

@@ -22,6 +22,7 @@ import {
   Check,
   Clock3,
   Maximize2,
+  Eye,
 } from "lucide-react";
 
 // Must be declared at module scope, not inside the component —
@@ -65,6 +66,13 @@ type Message = {
 };
 
 const QUICK_REACTIONS = ["❤️", "😂", "😮", "😢", "🙏", "👍"];
+
+const DISAPPEAR_OPTIONS: { label: string; value: number | null; short: string }[] = [
+  { label: "♾️ Off", value: null, short: "Off" },
+  { label: "🕐 1 Hour", value: 3600, short: "1h" },
+  { label: "📅 24 Hours", value: 86400, short: "24h" },
+  { label: "🗓️ 7 Days", value: 604800, short: "7d" },
+];
 
 export default function ChatPage() {
   // Messages
@@ -110,6 +118,10 @@ export default function ChatPage() {
   // Per-message "..." menu (reply / edit / copy / delete / react)
   const [menuFor, setMenuFor] = useState<string | null>(null);
 
+  // Header "..." menu (search / view once / disappearing messages)
+  const [showHeaderMenu, setShowHeaderMenu] = useState(false);
+  const [showDisappearSubmenu, setShowDisappearSubmenu] = useState(false);
+
   // Reply
   const [replyTo, setReplyTo] = useState<Message | null>(null);
 
@@ -137,10 +149,14 @@ export default function ChatPage() {
   }, [messages]);
 
   // ==========================
-  // Close any open per-message menu on outside click
+  // Close any open per-message menu / header menu on outside click
   // ==========================
   useEffect(() => {
-    const close = () => setMenuFor(null);
+    const close = () => {
+      setMenuFor(null);
+      setShowHeaderMenu(false);
+      setShowDisappearSubmenu(false);
+    };
     window.addEventListener("click", close);
     return () => window.removeEventListener("click", close);
   }, []);
@@ -462,7 +478,6 @@ setTimeout(() => {
 
     setText("");
     setReplyTo(null);
-    setDisappearAfter(null);
 
     await loadMessages(myId, partnerId);
   }
@@ -540,6 +555,7 @@ setTimeout(() => {
 
     setUploading(false);
     setReplyTo(null);
+    setViewOnce(false);
 
     if (error) {
       alert(error.message);
@@ -593,6 +609,7 @@ const expiresAt = disappearAfter
 
     setUploading(false);
     setReplyTo(null);
+    setViewOnce(false);
 
     if (error) {
       alert(error.message);
@@ -776,6 +793,7 @@ const expiresAt = disappearAfter
   });
   setUploading(false);
   setReplyTo(null);
+  setViewOnce(false);
 
   if (error) {
     alert(error.message);
@@ -811,10 +829,13 @@ const expiresAt = disappearAfter
       )
     : visibleMessages;
 
+  const currentDisappearLabel =
+    DISAPPEAR_OPTIONS.find((o) => o.value === disappearAfter)?.short ?? "Off";
+
   return (
     <main className="h-[100dvh] bg-zinc-950 text-white flex flex-col overflow-hidden overscroll-none">
       {/* Header */}
-<header className="shrink-0 border-b border-zinc-800 
+<header className="relative shrink-0 border-b border-zinc-800 
 px-3 py-3 sm:px-4 flex items-center justify-between gap-3">
         <div className="min-w-0 flex-1">
           <h1 className="text-lg sm:text-2xl font-bold text-pink-500 truncate">
@@ -834,13 +855,96 @@ px-3 py-3 sm:px-4 flex items-center justify-between gap-3">
           </p>
         </div>
 
-        <button
-          type="button"
-          onClick={() => setSearchOpen((v) => !v)}
-          className="h-11 w-11 shrink-0 rounded-xl bg-zinc-800 flex items-center justify-center 
-          hover:bg-zinc-700 transition" title="Search messages">
-          <Search size={20} />
-        </button>
+        <div className="relative shrink-0">
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setShowHeaderMenu((v) => !v);
+              setShowDisappearSubmenu(false);
+            }}
+            className="h-11 w-11 rounded-xl bg-zinc-800 flex items-center justify-center 
+            hover:bg-zinc-700 transition"
+            title="Menu"
+          >
+            <MoreVertical size={20} />
+          </button>
+
+          {showHeaderMenu && (
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className="absolute z-50 top-12 right-0 bg-zinc-900 border border-zinc-700 
+              rounded-xl shadow-xl overflow-hidden w-60 text-sm"
+            >
+              {/* Search */}
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchOpen((v) => !v);
+                  setShowHeaderMenu(false);
+                }}
+                className="w-full flex items-center gap-2 px-3 py-3 hover:bg-zinc-800 transition"
+              >
+                <Search size={16} />
+                Search Messages
+              </button>
+
+              {/* View Once */}
+              <button
+                type="button"
+                onClick={() => setViewOnce((v) => !v)}
+                className="w-full flex items-center justify-between gap-2 px-3 py-3 hover:bg-zinc-800 transition"
+              >
+                <span className="flex items-center gap-2">
+                  <Eye size={16} />
+                  View Once (next media)
+                </span>
+                {viewOnce && <Check size={16} className="text-pink-400" />}
+              </button>
+
+              {/* Disappearing Messages */}
+              <div className="border-t border-zinc-700">
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowDisappearSubmenu((v) => !v);
+                  }}
+                  className="w-full flex items-center justify-between gap-2 px-3 py-3 hover:bg-zinc-800 transition"
+                >
+                  <span className="flex items-center gap-2">
+                    <Clock3 size={16} />
+                    Disappearing Messages
+                  </span>
+                  <span className="text-xs text-zinc-400">
+                    {currentDisappearLabel}
+                  </span>
+                </button>
+
+                {showDisappearSubmenu && (
+                  <div className="bg-zinc-950">
+                    {DISAPPEAR_OPTIONS.map((opt) => (
+                      <button
+                        type="button"
+                        key={opt.short}
+                        onClick={() => {
+                          setDisappearAfter(opt.value);
+                          setShowDisappearSubmenu(false);
+                          setShowHeaderMenu(false);
+                        }}
+                        className={`w-full text-left px-3 py-2 pl-9 hover:bg-zinc-800 transition ${
+                          disappearAfter === opt.value ? "text-pink-400" : "text-zinc-200"
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
       </header>
 
       {searchOpen && (
@@ -1146,17 +1250,50 @@ px-3 py-3 sm:px-4 flex items-center justify-between gap-3">
         </div>
       )}
 
+      {/* Composer status pills (view once / disappearing — set from the ⋮ menu above) */}
+      {(viewOnce || disappearAfter) && !editingMessage && (
+        <div className="border-t border-zinc-800 px-3 pt-2 flex items-center gap-2 flex-wrap bg-zinc-950">
+          {viewOnce && (
+            <span className="flex items-center gap-1 text-[11px] bg-zinc-800 text-pink-400 px-2 py-1 rounded-full">
+              <Eye size={12} /> View once on
+              <button
+                type="button"
+                onClick={() => setViewOnce(false)}
+                className="ml-1 text-zinc-400 hover:text-white"
+              >
+                <X size={11} />
+              </button>
+            </span>
+          )}
+          {disappearAfter && (
+            <span className="flex items-center gap-1 text-[11px] bg-zinc-800 text-yellow-400 px-2 py-1 rounded-full">
+              <Clock3 size={12} /> Disappears in {currentDisappearLabel}
+              <button
+                type="button"
+                onClick={() => setDisappearAfter(null)}
+                className="ml-1 text-zinc-400 hover:text-white"
+              >
+                <X size={11} />
+              </button>
+            </span>
+          )}
+        </div>
+      )}
+
       {/* Input */}
-   <div className="
+   <div
+className="
 shrink-0
 border-t border-zinc-800
 bg-zinc-950/95
 backdrop-blur-md
 px-2 py-2
 sm:px-3 sm:py-3
-flex items-center gap-2
-overflow-x-auto
-scrollbar-hide
+flex
+items-center
+gap-2
+w-full
+min-w-0
 pb-[max(env(safe-area-inset-bottom),8px)]
 ">
   
@@ -1203,20 +1340,6 @@ behavior:"smooth"
             <ImagePlus size={22} />
           </button>
         )}
-   <label className="hidden md:flex items-center gap-2 text-xs whitespace-nowrap shrink-0">
-<input
-type="checkbox"
-checked={viewOnce}
-onChange={(e)=>setViewOnce(e.target.checked)}
-/>
-
-  <input
-    type="checkbox"
-    checked={viewOnce}
-    onChange={(e) => setViewOnce(e.target.checked)}
-  />
-  👁 View Once
-</label>
 
         <div className="relative">
           <button
@@ -1246,22 +1369,6 @@ onEmojiClick={addEmoji}
             </div>
           )}
         </div>
-        <div className="relative">
-  <select
-    value={disappearAfter ?? ""}
-    onChange={(e) =>
-      setDisappearAfter(
-        e.target.value ? Number(e.target.value) : null
-      )
-    }
-    className="hidden sm:block rounded-xl bg-zinc-800 px-2 py-3 text-xs outline-none shrink-0"
-  >
-    <option value="">♾️ Off</option>
-    <option value="3600">🕐 1 Hour</option>
-    <option value="86400">📅 24 Hours</option>
-    <option value="604800">🗓️ 7 Days</option>
-  </select>
-</div>
 
         {!editingMessage &&
           (recording ? (
@@ -1297,7 +1404,18 @@ onEmojiClick={addEmoji}
             }
           }}
           placeholder={editingMessage ? "Edit message..." : "Type a message..."}
-         className="flex-1 min-w-0 rounded-xl bg-zinc-900 px-3 py-3 text-sm sm:text-base outline-none"
+         className="
+flex-1
+w-0
+min-w-0
+rounded-xl
+bg-zinc-900
+px-3
+py-3
+text-sm
+sm:text-base
+outline-none
+"
         />
 
         <button

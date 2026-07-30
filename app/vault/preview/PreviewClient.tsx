@@ -118,6 +118,7 @@ async function deleteMemory() {
     .from("vault_files")
     .update({
       deleted: true,
+      deleted_at: new Date().toISOString(),
     })
     .eq("id", item.id);
 
@@ -125,6 +126,8 @@ async function deleteMemory() {
     alert(error.message);
     return;
   }
+
+  alert("🗑 Memory moved to Trash");
 
   router.push("/vault");
 }
