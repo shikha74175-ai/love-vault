@@ -2,6 +2,10 @@
 
 import Image from "next/image";
 import { FileText, Music } from "lucide-react";
+import {
+  TransformWrapper,
+  TransformComponent,
+} from "react-zoom-pan-pinch";
 
 type Props = {
   fileType: string;
@@ -22,16 +26,41 @@ export default function PreviewContent({
         {/* IMAGE */}
 
         {fileType === "image" && (
-          <div className="relative w-full h-[75vh]">
-            <Image
-              src={url}
-              alt={fileName}
-              fill
-              unoptimized
-              className="object-contain bg-black"
-            />
-          </div>
-        )}
+  <div className="w-full h-[calc(100vh-170px)] bg-black flex items-center justify-center overflow-hidden">
+
+    <TransformWrapper
+      initialScale={1}
+      minScale={1}
+      maxScale={5}
+      doubleClick={{ mode: "zoomIn" }}
+      wheel={{ step: 0.15 }}
+      pinch={{ step: 5 }}
+      centerOnInit
+    >
+      <TransformComponent
+        wrapperClass="!w-full !h-full"
+        contentClass="!w-full !h-full flex items-center justify-center"
+      >
+        <Image
+          src={url}
+          alt={fileName}
+          width={2500}
+          height={2500}
+          unoptimized
+          priority
+          draggable={false}
+          className="
+            max-w-full
+            max-h-full
+            object-contain
+            select-none
+          "
+        />
+      </TransformComponent>
+    </TransformWrapper>
+
+  </div>
+)}
 
         {/* VIDEO */}
 
@@ -39,14 +68,14 @@ export default function PreviewContent({
           <video
             src={url}
             controls
-            className="w-full max-h-[75vh] bg-black"
+            className="w-full h-[calc(100vh-170px)] bg-black object-contain"
           />
         )}
 
         {/* AUDIO */}
 
         {fileType === "audio" && (
-          <div className="flex flex-col items-center justify-center py-24 gap-6">
+          <div className="flex flex-col items-center justify-center min-h-[calc(100vh-170px)] gap-6">
 
             <Music
               size={80}
@@ -71,7 +100,7 @@ export default function PreviewContent({
         {fileType === "document" && (
           <iframe
             src={url}
-            className="w-full h-[75vh] bg-white"
+            className="w-full h-[calc(100vh-170px)] bg-white"
           />
         )}
 

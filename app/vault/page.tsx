@@ -474,7 +474,7 @@ filteredItems.length
     <VaultGrid
       items={filteredItems.filter(i => i.deleted)}
       onOpen={(item) => {
-        router.push(`/vault/preview?id=${item.id}`);
+        router.push(`/vault/preview?id=${item.id}&tab=${activeTab}`);
       }}
     />
   </>
@@ -485,7 +485,7 @@ filteredItems.length
             i => i.visibility === "private"
           )}
           onOpen={(item) => {
-            router.push(`/vault/preview?id=${item.id}`);
+            router.push(`/vault/preview?id=${item.id}&tab=${activeTab}`);
           }}
         />
       </>
@@ -503,7 +503,7 @@ filteredItems.length
             i => i.visibility === "shared"
           )}
           onOpen={(item) => {
-            router.push(`/vault/preview?id=${item.id}`);
+            router.push(`/vault/preview?id=${item.id}&tab=${activeTab}`);
           }}
         />
       </>

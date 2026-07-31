@@ -6,8 +6,11 @@ import MobileBottomNav from "@/app/components/MobileBottomNav";
 export default function LayoutClient() {
   const pathname = usePathname();
 
-  // Chat page par navbar hide
-  if (pathname.startsWith("/chat")) {
+  // Chat aur Preview page par navbar hide
+  if (
+    pathname.startsWith("/chat") ||
+    pathname.startsWith("/vault/preview")
+  ) {
     return null;
   }
 

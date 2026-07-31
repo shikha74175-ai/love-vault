@@ -23,22 +23,38 @@ export default function PreviewActions({
   onInfo,
 }: Props) {
   return (
-    <div className="sticky bottom-0 border-t border-zinc-800 bg-zinc-950/90 backdrop-blur-xl">
-
-      <div className="flex justify-center gap-4 p-5 flex-wrap">
+    <div
+      className="
+        fixed
+        bottom-0
+        left-0
+        right-0
+        z-50
+        border-t
+        border-zinc-800
+        bg-zinc-950/90
+        backdrop-blur-xl
+        px-4
+        py-3
+        pb-[calc(env(safe-area-inset-bottom)+12px)]
+      "
+    >
+      <div className="mx-auto flex max-w-3xl gap-3">
 
         {/* Favorite */}
-
         <button
           onClick={onFavorite}
           className="
-          flex items-center gap-2
-          rounded-xl
-          bg-zinc-900
-          hover:bg-pink-600
-          transition
-          px-5
-          py-3
+            flex-1
+            h-12
+            rounded-xl
+            bg-zinc-900
+            hover:bg-pink-600
+            transition
+            flex
+            items-center
+            justify-center
+            gap-2
           "
         >
           <Heart
@@ -50,68 +66,82 @@ export default function PreviewActions({
             }
           />
 
-          Favorite
+          <span className="hidden sm:inline">
+            Favorite
+          </span>
         </button>
 
         {/* Download */}
-
         <button
           onClick={onDownload}
           className="
-          flex items-center gap-2
-          rounded-xl
-          bg-zinc-900
-          hover:bg-blue-600
-          transition
-          px-5
-          py-3
+            flex-1
+            h-12
+            rounded-xl
+            bg-zinc-900
+            hover:bg-blue-600
+            transition
+            flex
+            items-center
+            justify-center
+            gap-2
           "
         >
           <Download size={20} />
 
-          Download
+          <span className="hidden sm:inline">
+            Download
+          </span>
         </button>
 
-        {/* Info */}
-
+        {/* Details */}
         <button
           onClick={onInfo}
           className="
-          flex items-center gap-2
-          rounded-xl
-          bg-zinc-900
-          hover:bg-zinc-700
-          transition
-          px-5
-          py-3
+            flex-1
+            h-12
+            rounded-xl
+            bg-zinc-900
+            hover:bg-zinc-700
+            transition
+            flex
+            items-center
+            justify-center
+            gap-2
           "
         >
           <Info size={20} />
 
-          Details
+          <span className="hidden sm:inline">
+            Details
+          </span>
         </button>
 
         {/* Delete */}
-
         <button
           onClick={onDelete}
           className="
-          flex items-center gap-2
-          rounded-xl
-          bg-red-600
-          hover:bg-red-500
-          transition
-          px-5
-          py-3
+            flex-1
+            h-12
+            rounded-xl
+            bg-red-600
+            hover:bg-red-700
+            transition
+            flex
+            items-center
+            justify-center
+            gap-2
+            text-white
           "
         >
           <Trash2 size={20} />
 
-          Delete
+          <span className="hidden sm:inline">
+            Delete
+          </span>
         </button>
 
       </div>
-
     </div>
   );
 }
