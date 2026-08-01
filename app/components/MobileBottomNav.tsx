@@ -7,6 +7,7 @@ import {
   Heart,
   Upload,
   User,
+  Settings,
 } from "lucide-react";
 
 export default function MobileBottomNav() {
@@ -33,35 +34,49 @@ export default function MobileBottomNav() {
       icon: User,
       label: "Profile",
     },
+    {
+      href: "/settings",
+      icon: Settings,
+      label: "Settings",
+    },
   ];
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-zinc-800 bg-zinc-950/95 backdrop-blur-xl md:hidden">
-      <div className="grid grid-cols-4 h-16">
+      <div className="grid h-16 grid-cols-5">
+
         {nav.map((item) => {
+
           const Icon = item.icon;
 
           const active =
-            pathname === item.href;
+            pathname === item.href ||
+            pathname.startsWith(item.href + "/");
 
           return (
+
             <Link
               key={item.href}
               href={item.href}
-              className={`flex flex-col items-center justify-center transition ${
+              className={`flex flex-col items-center justify-center transition-colors ${
                 active
                   ? "text-pink-500"
-                  : "text-zinc-400"
+                  : "text-zinc-400 hover:text-white"
               }`}
             >
+
               <Icon size={22} />
 
-              <span className="text-[11px] mt-1">
+              <span className="mt-1 text-[11px]">
                 {item.label}
               </span>
+
             </Link>
+
           );
+
         })}
+
       </div>
     </nav>
   );

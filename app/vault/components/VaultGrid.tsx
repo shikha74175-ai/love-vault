@@ -9,205 +9,503 @@ import {
   Play,
 } from "lucide-react";
 
-export type VaultItem = {
-  id: string;
-  file_name: string;
-  file_type: "image" | "video" | "audio" | "document";
-  signedUrl: string;
-  favorite: boolean;
-  visibility: "private" | "shared";
-  folder: string | null;
-  folder_id: string | null;
-  created_at: string;
-  deleted: boolean;
- deleted_at?: string | null;
-};
+import { VaultItem } from "../types";
+
 type Props = {
   items: VaultItem[];
+
+  activeTab: string;
+
   onOpen: (item: VaultItem) => void;
+
+  toggleFavorite: (
+    item: VaultItem
+  ) => void;
+
+  deleteMemory: (
+    item: VaultItem
+  ) => void;
+
+  restoreMemory: (
+    item: VaultItem
+  ) => void;
+
+  deleteForeverMemory: (
+    item: VaultItem
+  ) => void;
 };
 
-export default function VaultGrid({
-  items,
-  onOpen,
-}: Props) {
-  if (!items.length) {
-    return (
-      <div className="py-20 sm:py-28 text-center text-zinc-500">
-        <div className="text-5xl sm:text-6xl mb-4">
-          ❤️
-        </div>
+function formatDate(date: string) {
+  return new Date(date).toLocaleDateString();
+}
 
-        <h2 className="text-xl sm:text-2xl font-bold">
-          No memories yet
-        </h2>
-
-        <p className="mt-3 text-sm sm:text-base">
-          Upload your first memory.
-        </p>
-      </div>
-    );
-  }
-
+function Placeholder({
+  text,
+}: {
+  text: string;
+}) {
   return (
     <div
       className="
-      grid
-      grid-cols-2
-      sm:grid-cols-3
-      md:grid-cols-4
-      xl:grid-cols-5
-      2xl:grid-cols-6
-      gap-3
-      sm:gap-4
-      lg:gap-5
-      "
+      flex
+      h-full
+      w-full
+      items-center
+      justify-center
+      bg-zinc-800
+      text-sm
+      text-zinc-500
+    "
     >
-      {items.map((item) => (
-        <button
-          key={item.id}
-          onClick={() => onOpen(item)}
+      {text}
+    </div>
+  );
+}
+
+function FilePreview({
+  item,
+}: {
+  item: VaultItem;
+}) {
+  switch (item.file_type) {
+    case "image":
+
+      return item.signedUrl ? (
+        <img
+          src={item.signedUrl}
+          alt={item.file_name}
+          loading="lazy"
           className="
-          group
-          overflow-hidden
-          rounded-2xl
-          sm:rounded-3xl
-          bg-zinc-900
-          border
-          border-zinc-800
-          transition-all
-          duration-300
-          text-left
-          active:scale-95
-          md:hover:border-pink-500/50
-          md:hover:shadow-xl
-          md:hover:shadow-pink-500/20
+            h-full
+            w-full
+            object-cover
+            transition-transform
+            duration-500
+            group-hover:scale-110
           "
-        >
-          {/* Preview */}
+        />
+      ) : (
+        <Placeholder text="Image unavailable" />
+      );
 
-          <div className="relative aspect-square overflow-hidden">
+    case "video":
 
-            {item.file_type === "image" && (
-              <img
-                src={item.signedUrl}
-                alt={item.file_name}
-                loading="lazy"
+      return item.signedUrl ? (
+        <>
+          <video
+            src={item.signedUrl}
+            muted
+            preload="metadata"
+            className="
+              h-full
+              w-full
+              object-cover
+            "
+          />
+
+          <div
+            className="
+              absolute
+              inset-0
+              flex
+              items-center
+              justify-center
+            "
+          >
+            <div
+              className="
+                rounded-full
+                bg-black/60
+                p-3
+                backdrop-blur
+              "
+            >
+              <Play
+                size={22}
                 className="
-                w-full
-                h-full
-                object-cover
-                md:group-hover:scale-110
-                transition-transform
-                duration-500
+                  fill-white
+                  text-white
                 "
               />
-            )}
+            </div>
+          </div>
+        </>
+      ) : (
+        <Placeholder text="Video unavailable" />
+      );
 
-            {item.file_type === "video" && (
-              <>
-                <video
-                  src={item.signedUrl}
-                  muted
-                  preload="metadata"
-                  className="w-full h-full object-cover"
+    case "audio":
+
+      return (
+        <div
+          className="
+            flex
+            h-full
+            w-full
+            items-center
+            justify-center
+            bg-gradient-to-br
+            from-pink-600
+            to-fuchsia-700
+          "
+        >
+          <Music size={48} />
+        </div>
+      );
+
+    default:
+
+      return (
+        <div
+          className="
+            flex
+            h-full
+            w-full
+            items-center
+            justify-center
+            bg-gradient-to-br
+            from-blue-600
+            to-cyan-600
+          "
+        >
+          <FileText size={48} />
+        </div>
+      );
+  }
+}
+
+export default function VaultGrid({
+
+  items,
+
+  activeTab,
+
+  onOpen,
+
+  toggleFavorite,
+
+  deleteMemory,
+
+  restoreMemory,
+
+  deleteForeverMemory,
+
+}: Props) {
+
+  if (!items.length) {
+
+    return (
+
+      <div
+        className="
+          py-24
+          text-center
+          text-zinc-500
+        "
+      >
+
+        <div className="mb-5 text-6xl">
+          ❤️
+        </div>
+
+        <h2 className="text-2xl font-bold">
+          No memories yet
+        </h2>
+
+        <p className="mt-3">
+
+          Upload your first memory.
+
+        </p>
+
+      </div>
+
+    );
+
+  }
+
+  return (
+
+    <div
+      className="
+        grid
+        grid-cols-2
+        gap-4
+        sm:grid-cols-3
+        lg:grid-cols-4
+        xl:grid-cols-5
+        2xl:grid-cols-6
+      "
+    >
+            {items.map((item) => {
+
+        const VisibilityIcon =
+          item.visibility === "private"
+            ? Lock
+            : Users;
+
+        return (
+
+          <div
+            key={item.id}
+            className="
+              group
+              overflow-hidden
+              rounded-3xl
+              border
+              border-zinc-800
+              bg-zinc-900
+              transition-all
+              duration-300
+              hover:border-pink-500/40
+              hover:shadow-xl
+              hover:shadow-pink-500/10
+            "
+          >
+
+            {/* Card */}
+
+            <button
+              onClick={() => onOpen(item)}
+              className="w-full text-left"
+            >
+
+              {/* Preview */}
+
+              <div
+                className="
+                  relative
+                  aspect-square
+                  overflow-hidden
+                "
+              >
+
+                <FilePreview item={item} />
+
+                {/* Gradient */}
+
+                <div
+                  className="
+                    absolute
+                    inset-0
+                    bg-gradient-to-t
+                    from-black/70
+                    via-transparent
+                    to-transparent
+                  "
                 />
 
-                <div className="absolute inset-0 flex items-center justify-center">
+                {/* Visibility */}
 
-                  <div className="rounded-full bg-black/60 backdrop-blur p-2 sm:p-3">
+                <div
+                  className="
+                    absolute
+                    left-3
+                    top-3
+                  "
+                >
 
-                    <Play
-                      className="fill-white text-white"
-                      size={22}
+                  <div
+                    className="
+                      rounded-full
+                      bg-black/60
+                      p-2
+                      backdrop-blur
+                    "
+                  >
+
+                    <VisibilityIcon
+                      size={15}
                     />
 
                   </div>
 
                 </div>
-              </>
-            )}
 
-            {item.file_type === "audio" && (
-              <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-pink-600 to-fuchsia-700">
+                {/* Favorite */}
 
-                <Music
-                  size={42}
-                  className="sm:w-14 sm:h-14"
-                />
+                {item.favorite && (
 
-              </div>
-            )}
+                  <div
+                    className="
+                      absolute
+                      right-3
+                      top-3
+                    "
+                  >
 
-            {item.file_type === "document" && (
-              <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-blue-600 to-cyan-600">
+                    <div
+                      className="
+                        rounded-full
+                        bg-pink-600
+                        p-2
+                      "
+                    >
 
-                <FileText
-                  size={42}
-                  className="sm:w-14 sm:h-14"
-                />
+                      <Heart
+                        size={15}
+                        className="
+                          fill-white
+                          text-white
+                        "
+                      />
 
-              </div>
-            )}
+                    </div>
 
-            {/* Overlay */}
+                  </div>
 
-            <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent" />
-
-            {/* Left Badge */}
-
-            <div className="absolute top-2 left-2 sm:top-3 sm:left-3">
-
-              <div className="rounded-full bg-black/60 backdrop-blur p-1.5 sm:p-2">
-
-                {item.visibility === "private" ? (
-                  <Lock size={14} />
-                ) : (
-                  <Users size={14} />
                 )}
 
               </div>
 
-            </div>
+              {/* Footer */}
 
-            {/* Favorite */}
+              <div className="p-4">
 
-            {item.favorite && (
-              <div className="absolute top-2 right-2 sm:top-3 sm:right-3">
+                <h3
+                  className="
+                    truncate
+                    font-semibold
+                    text-white
+                  "
+                >
 
-                <div className="rounded-full bg-pink-600 p-1.5 sm:p-2">
+                  {item.file_name}
 
-                  <Heart
-                    size={14}
-                    className="fill-white text-white"
-                  />
+                </h3>
 
-                </div>
+                <p
+                  className="
+                    mt-2
+                    truncate
+                    text-xs
+                    text-zinc-400
+                  "
+                >
+
+                  📁 {item.folder ?? "No Folder"}
+
+                </p>
+
+                <p
+                  className="
+                    mt-1
+                    text-xs
+                    text-zinc-500
+                  "
+                >
+
+                  {formatDate(
+                    item.created_at
+                  )}
+
+                </p>
 
               </div>
-            )}
+
+            </button>
+
+            {/* Actions */}
+
+            <div
+              className="
+                flex
+                border-t
+                border-zinc-800
+              "
+            >
+                            {/* Favorite */}
+
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  toggleFavorite(item);
+                }}
+                className="
+                  flex-1
+                  py-3
+                  transition
+                  hover:bg-pink-600
+                "
+              >
+                <Heart
+                  size={18}
+                  className={
+                    item.favorite
+                      ? "mx-auto fill-white text-white"
+                      : "mx-auto"
+                  }
+                />
+              </button>
+
+              {activeTab === "trash" ? (
+                <>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      restoreMemory(item);
+                    }}
+                    className="
+                      flex-1
+                      border-l
+                      border-zinc-800
+                      py-3
+                      text-sm
+                      transition
+                      hover:bg-green-600
+                    "
+                  >
+                    ♻ Restore
+                  </button>
+
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      deleteForeverMemory(item);
+                    }}
+                    className="
+                      flex-1
+                      border-l
+                      border-zinc-800
+                      py-3
+                      text-sm
+                      transition
+                      hover:bg-red-600
+                    "
+                  >
+                    ❌ Delete
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    deleteMemory(item);
+                  }}
+                  className="
+                    flex-1
+                    border-l
+                    border-zinc-800
+                    py-3
+                    text-sm
+                    transition
+                    hover:bg-red-600
+                  "
+                >
+                  🗑 Delete
+                </button>
+              )}
+
+            </div>
+
           </div>
 
-          {/* Footer */}
+        );
 
-          <div className="p-3 sm:p-4">
+      })}
 
-            <h3 className="truncate text-sm sm:text-base font-semibold text-white">
-              {item.file_name}
-            </h3>
-
-            <p className="text-[11px] sm:text-xs text-zinc-400 mt-2 truncate">
-              📁 {item.folder || "No Folder"}
-            </p>
-
-            <p className="text-[11px] sm:text-xs text-zinc-500 mt-1">
-              {new Date(item.created_at).toLocaleDateString()}
-            </p>
-
-          </div>
-
-        </button>
-      ))}
     </div>
+
   );
+
 }

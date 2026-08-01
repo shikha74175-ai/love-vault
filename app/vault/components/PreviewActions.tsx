@@ -5,15 +5,61 @@ import {
   Download,
   Trash2,
   Info,
+  RotateCcw,
 } from "lucide-react";
 
 type Props = {
   favorite: boolean;
+
   onFavorite: () => void;
   onDownload: () => void;
   onDelete: () => void;
   onInfo: () => void;
+
+  onRestore?: () => void;
+
+  deleteLabel?: string;
 };
+
+type ButtonProps = {
+  icon: React.ReactNode;
+  label: string;
+  onClick: () => void;
+  className?: string;
+};
+
+function ActionButton({
+  icon,
+  label,
+  onClick,
+  className = "",
+}: ButtonProps) {
+  return (
+    <button
+      onClick={onClick}
+      className={`
+        flex
+        h-12
+        min-w-[110px]
+        flex-1
+        items-center
+        justify-center
+        gap-2
+        rounded-xl
+        transition-all
+        duration-200
+        active:scale-95
+        ${className}
+      `}
+    >
+      {icon}
+
+      <span className="hidden sm:inline">
+        {label}
+      </span>
+    </button>
+  );
+}
 
 export default function PreviewActions({
   favorite,
@@ -21,6 +67,8 @@ export default function PreviewActions({
   onDownload,
   onDelete,
   onInfo,
+  onRestore,
+  deleteLabel,
 }: Props) {
   return (
     <div
@@ -39,108 +87,91 @@ export default function PreviewActions({
         pb-[calc(env(safe-area-inset-bottom)+12px)]
       "
     >
-      <div className="mx-auto flex max-w-3xl gap-3">
-
+      <div
+        className="
+          mx-auto
+          flex
+          max-w-5xl
+          flex-wrap
+          gap-3
+        "
+      >
         {/* Favorite */}
-        <button
-          onClick={onFavorite}
-          className="
-            flex-1
-            h-12
-            rounded-xl
-            bg-zinc-900
-            hover:bg-pink-600
-            transition
-            flex
-            items-center
-            justify-center
-            gap-2
-          "
-        >
-          <Heart
-            size={20}
-            className={
-              favorite
-                ? "fill-pink-500 text-pink-500"
-                : ""
-            }
-          />
 
-          <span className="hidden sm:inline">
-            Favorite
-          </span>
-        </button>
+        <ActionButton
+          onClick={onFavorite}
+          label="Favorite"
+          className={
+            favorite
+              ? "bg-pink-600 text-white hover:bg-pink-500"
+              : "bg-zinc-900 hover:bg-pink-600"
+          }
+          icon={
+            <Heart
+              size={20}
+              className={
+                favorite
+                  ? "fill-white"
+                  : ""
+              }
+            />
+          }
+        />
 
         {/* Download */}
-        <button
+
+        <ActionButton
           onClick={onDownload}
+          label="Download"
           className="
-            flex-1
-            h-12
-            rounded-xl
             bg-zinc-900
             hover:bg-blue-600
-            transition
-            flex
-            items-center
-            justify-center
-            gap-2
           "
-        >
-          <Download size={20} />
-
-          <span className="hidden sm:inline">
-            Download
-          </span>
-        </button>
+          icon={<Download size={20} />}
+        />
 
         {/* Details */}
-        <button
+
+        <ActionButton
           onClick={onInfo}
+          label="Details"
           className="
-            flex-1
-            h-12
-            rounded-xl
             bg-zinc-900
             hover:bg-zinc-700
-            transition
-            flex
-            items-center
-            justify-center
-            gap-2
           "
-        >
-          <Info size={20} />
+          icon={<Info size={20} />}
+        />
 
-          <span className="hidden sm:inline">
-            Details
-          </span>
-        </button>
+        {/* Restore */}
+
+        {onRestore && (
+          <ActionButton
+            onClick={onRestore}
+            label="Restore"
+            className="
+              bg-green-600
+              text-white
+              hover:bg-green-500
+            "
+            icon={<RotateCcw size={20} />}
+          />
+        )}
 
         {/* Delete */}
-        <button
+
+        <ActionButton
           onClick={onDelete}
+          label={
+            deleteLabel ??
+            "Delete"
+          }
           className="
-            flex-1
-            h-12
-            rounded-xl
             bg-red-600
-            hover:bg-red-700
-            transition
-            flex
-            items-center
-            justify-center
-            gap-2
             text-white
+            hover:bg-red-500
           "
-        >
-          <Trash2 size={20} />
-
-          <span className="hidden sm:inline">
-            Delete
-          </span>
-        </button>
-
+          icon={<Trash2 size={20} />}
+        />
       </div>
     </div>
   );
