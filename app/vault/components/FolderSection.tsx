@@ -37,6 +37,7 @@ type Props = {
   pinFolder: (folder: VaultFolder) => void;
   deleteFolder: (folder: VaultFolder) => void;
   restoreFolder: (folder: VaultFolder) => void;
+
   permanentlyDeleteFolder: (
     folder: VaultFolder
   ) => void;
@@ -52,9 +53,8 @@ type Props = {
   search: string;
   setSearch: (v: string) => void;
 
-  onUpload: () => void;
+ onUpload: () => Promise<void>;
 };
-
 export default function FolderSection({
   visibleFolders,
   folders,
