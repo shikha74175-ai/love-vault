@@ -100,7 +100,28 @@ export default function VaultLockScreen({
               )
             }
             placeholder="••••"
-            className="w-full rounded-xl border border-zinc-700 bg-zinc-950 py-4 pl-12 pr-12 text-center text-3xl tracking-[12px] outline-none transition focus:border-pink-500"
+           className="
+w-full
+rounded-xl
+border
+border-zinc-700
+bg-zinc-950
+py-4
+pl-12
+pr-12
+text-center
+text-3xl
+font-semibold
+tracking-[12px]
+text-white
+placeholder:text-zinc-500
+caret-pink-500
+outline-none
+transition
+focus:border-pink-500
+focus:ring-2
+focus:ring-pink-500/30
+"
           />
 
           <button

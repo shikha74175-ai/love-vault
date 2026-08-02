@@ -92,6 +92,22 @@ const lock = useVaultLock({
   // ==========================
   // USER
   // ==========================
+  useEffect(() => {
+  async function loadUser() {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      router.push("/login");
+      return;
+    }
+
+    setUserId(user.id);
+  }
+
+  loadUser();
+}, [router]);
 useEffect(() => {
 
   if (!userId) return;
