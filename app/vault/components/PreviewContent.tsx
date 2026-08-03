@@ -200,7 +200,7 @@ export default function PreviewContent({
             className={`
               w-full
               ${PREVIEW_HEIGHT}
-              bg-white
+              bg-zinc-950 text-white
             `}
           />
 

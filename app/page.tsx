@@ -16,35 +16,35 @@ export default function Home() {
         <div className="flex flex-wrap justify-center gap-4">
           <Link
             href="/login"
-            className="rounded-xl bg-white px-8 py-3 font-semibold text-pink-600 shadow-lg transition hover:scale-105"
+            className="rounded-xl bg-zinc-950 text-white px-8 py-3 font-semibold text-pink-600 shadow-lg transition hover:scale-105"
           >
             Login
           </Link>
 
           <Link
             href="/signup"
-            className="rounded-xl border border-white px-8 py-3 font-semibold transition hover:bg-white hover:text-pink-600"
+            className="rounded-xl border border-white px-8 py-3 font-semibold transition hover:bg-zinc-950 text-white hover:text-pink-600"
           >
             Sign Up
           </Link>
         </div>
 
         <div className="mt-16 grid w-full max-w-5xl gap-6 md:grid-cols-3">
-          <div className="rounded-2xl bg-white/10 p-6 backdrop-blur">
+          <div className="rounded-2xl bg-zinc-950 text-white/10 p-6 backdrop-blur">
             <h2 className="mb-3 text-2xl font-bold">🔒 Secure Vault</h2>
             <p className="text-pink-100">
               Store photos, videos, voice notes and memories securely.
             </p>
           </div>
 
-          <div className="rounded-2xl bg-white/10 p-6 backdrop-blur">
+          <div className="rounded-2xl bg-zinc-950 text-white/10 p-6 backdrop-blur">
             <h2 className="mb-3 text-2xl font-bold">💬 Couple Chat</h2>
             <p className="text-pink-100">
               Real-time private messaging with online status and last seen.
             </p>
           </div>
 
-          <div className="rounded-2xl bg-white/10 p-6 backdrop-blur">
+          <div className="rounded-2xl bg-zinc-950 text-white/10 p-6 backdrop-blur">
             <h2 className="mb-3 text-2xl font-bold">🤖 AI Assistant</h2>
             <p className="text-pink-100">
               Get reminders, gift ideas, anniversary planning and more.

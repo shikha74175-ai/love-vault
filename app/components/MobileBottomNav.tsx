@@ -5,7 +5,6 @@ import { usePathname } from "next/navigation";
 import {
   House,
   Heart,
-  Upload,
   User,
   Settings,
 } from "lucide-react";
@@ -25,11 +24,6 @@ export default function MobileBottomNav() {
       label: "Vault",
     },
     {
-      href: "/upload",
-      icon: Upload,
-      label: "Upload",
-    },
-    {
       href: "/profile",
       icon: User,
       label: "Profile",
@@ -43,10 +37,8 @@ export default function MobileBottomNav() {
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-zinc-800 bg-zinc-950/95 backdrop-blur-xl md:hidden">
-      <div className="grid h-16 grid-cols-5">
-
+      <div className="grid h-16 grid-cols-4">
         {nav.map((item) => {
-
           const Icon = item.icon;
 
           const active =
@@ -54,7 +46,6 @@ export default function MobileBottomNav() {
             pathname.startsWith(item.href + "/");
 
           return (
-
             <Link
               key={item.href}
               href={item.href}
@@ -64,19 +55,14 @@ export default function MobileBottomNav() {
                   : "text-zinc-400 hover:text-white"
               }`}
             >
-
               <Icon size={22} />
 
               <span className="mt-1 text-[11px]">
                 {item.label}
               </span>
-
             </Link>
-
           );
-
         })}
-
       </div>
     </nav>
   );
