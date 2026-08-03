@@ -70,7 +70,13 @@ const modules = [
 
 ];
 
-export default function QuickAccess() {
+type QuickAccessProps = {
+  profile: any;
+};
+
+export default function QuickAccess({
+  profile,
+}: QuickAccessProps) {
 
   return (
 
