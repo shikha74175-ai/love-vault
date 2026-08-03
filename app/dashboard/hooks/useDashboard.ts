@@ -8,7 +8,6 @@ export type DashboardStats = {
   videos: number;
   albums: number;
   favorites: number;
-  aiMemory: any | null;
 };
 
 export type DashboardActivity = {
@@ -31,9 +30,9 @@ export type DashboardState = {
 
   activities: DashboardActivity[];
 
-aiMemory: any | null;
+  aiMemory: any | null;
 
-relationship: any | null;
+  relationship: any | null;
 };
 
 const initialState: DashboardState = {
@@ -52,11 +51,11 @@ const initialState: DashboardState = {
 
   recentMemories: [],
 
-activities: [],
+  activities: [],
 
-aiMemory: null,
+  aiMemory: null,
 
-relationship: null,
+  relationship: null,
 };
 
 export function useDashboard() {
@@ -72,27 +71,32 @@ export function useDashboard() {
       }));
 
       const data = await getDashboardData();
-setState({
 
-  loading: false,
+      setState({
+        loading: false,
 
-  error: null,
+        error: null,
 
-  profile: data.profile,
+        profile: data.profile,
 
-  stats: data.stats,
+        stats: data.stats,
 
-  recentMemories: data.recentMemories,
+        recentMemories:
+          data.recentMemories ?? [],
 
-  activities: data.activities ?? [],
+        activities:
+          data.activities ?? [],
 
-  aiMemory: data.aiMemory,
+        aiMemory:
+          data.aiMemory ?? null,
 
-  relationship: data.relationship,
+        relationship:
+          data.relationship ?? null,
+      });
 
-});
     } catch (err: any) {
-      console.error(err);
+
+      console.error("Dashboard Error:", err);
 
       setState((prev) => ({
         ...prev,
@@ -104,6 +108,7 @@ setState({
           "Unable to load dashboard.",
       }));
     }
+
   }, []);
 
   useEffect(() => {

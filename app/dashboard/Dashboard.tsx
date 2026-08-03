@@ -12,7 +12,6 @@ import DashboardSkeleton from "./components/DashboardSkeleton";
 import { useDashboard } from "./hooks/useDashboard";
 
 export default function Dashboard() {
-
   const dashboard = useDashboard();
 
   // -------------------------
@@ -20,21 +19,13 @@ export default function Dashboard() {
   // -------------------------
 
   if (dashboard.loading) {
-
     return (
-
       <div className="min-h-screen bg-zinc-950 text-white">
-
         <div className="mx-auto max-w-7xl px-6 py-6">
-
           <DashboardSkeleton />
-
         </div>
-
       </div>
-
     );
-
   }
 
   // -------------------------
@@ -42,48 +33,37 @@ export default function Dashboard() {
   // -------------------------
 
   if (dashboard.error) {
-
     return (
-
-      <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
-
+      <div className="flex min-h-screen items-center justify-center bg-zinc-950">
         <div className="rounded-3xl border border-red-500/20 bg-zinc-900 p-8">
 
           <h2 className="text-2xl font-bold text-red-400">
-
             Dashboard Error
-
           </h2>
 
           <p className="mt-3 text-zinc-400">
-
             {dashboard.error}
-
           </p>
 
           <button
             onClick={dashboard.refreshDashboard}
             className="
-            mt-6
-            rounded-xl
-            bg-pink-600
-            px-5
-            py-3
-            font-semibold
-            hover:bg-pink-700
+              mt-6
+              rounded-xl
+              bg-pink-600
+              px-5
+              py-3
+              font-semibold
+              transition
+              hover:bg-pink-700
             "
           >
-
             Retry
-
           </button>
 
         </div>
-
       </div>
-
     );
-
   }
 
   // -------------------------
@@ -91,20 +71,25 @@ export default function Dashboard() {
   // -------------------------
 
   return (
-
     <div className="min-h-screen bg-zinc-950 text-white">
 
-      <div className="mx-auto max-w-7xl px-6 py-6 space-y-8">
+      <div className="mx-auto max-w-7xl space-y-8 px-6 py-6">
 
         {/* Hero */}
 
-        <Hero dashboard={dashboard} />
+        <Hero
+          profile={dashboard.profile}
+          stats={dashboard.stats}
+          relationship={dashboard.relationship}
+        />
 
         {/* Stats */}
 
-        <StatsRow stats={dashboard.stats} />
+        <StatsRow
+          stats={dashboard.stats}
+        />
 
-        {/* Main */}
+        {/* Main Content */}
 
         <div className="grid gap-8 xl:grid-cols-12">
 
@@ -112,7 +97,9 @@ export default function Dashboard() {
 
           <div className="space-y-8 xl:col-span-9">
 
-            <QuickAccess />
+            <QuickAccess
+              profile={dashboard.profile}
+            />
 
             <div className="grid gap-8 lg:grid-cols-2">
 
@@ -121,23 +108,24 @@ export default function Dashboard() {
               />
 
               <RecentActivity
-  activities={dashboard.activities}
-/>
+                activities={dashboard.activities}
+              />
 
             </div>
 
-<AIMemory
-  aiMemory={dashboard.aiMemory}
-/>
+            <AIMemory
+              aiMemory={dashboard.aiMemory}
+            />
+
           </div>
 
-          {/* Right */}
+          {/* Right Sidebar */}
 
           <div className="xl:col-span-3">
 
             <SidebarWidget
-  relationship={dashboard.relationship}
-/>
+              relationship={dashboard.relationship}
+            />
 
           </div>
 
@@ -146,7 +134,5 @@ export default function Dashboard() {
       </div>
 
     </div>
-
   );
-
 }

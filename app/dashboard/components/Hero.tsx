@@ -8,38 +8,42 @@ import {
   FolderOpen,
 } from "lucide-react";
 
-import type { DashboardState } from "../hooks/useDashboard";
+
 
 type HeroProps = {
-  dashboard: DashboardState & {
-    refreshDashboard: () => Promise<void>;
+  profile: any;
+  stats: {
+    photos: number;
+    videos: number;
+    albums: number;
+    favorites: number;
   };
+  relationship: any;
 };
-
 export default function Hero({
-  dashboard,
+  profile,
+  stats,
+  relationship,
 }: HeroProps) {
 
-  const profile = dashboard.profile;
-
-  const stats = dashboard.stats;
 
   const fullName =
     profile?.full_name ||
     profile?.username ||
     "Love";
+    const relationshipDuration = relationship
+  ? `${relationship.years} Years • ${relationship.months} Months • ${relationship.days} Days`
+  : "--";
 
-  const relationshipSince =
-    profile?.relationship_since
-      ? new Date(
-          profile.relationship_since
-        ).toLocaleDateString("en-GB", {
-          day: "2-digit",
-          month: "long",
-          year: "numeric",
-        })
-      : "--";
+const anniversaryCountdown = relationship
+  ? `${relationship.anniversaryLeft} Days Left ❤️`
+  : "--";
 
+const totalMemories =
+  (stats.photos ?? 0) +
+  (stats.videos ?? 0);
+
+  
   return (
     <section
       className="
@@ -138,7 +142,7 @@ export default function Hero({
 
                 <h3 className="mt-4 text-2xl font-bold text-white">
 
-                  {relationshipSince}
+                  {relationshipDuration}
 
                 </h3>
 
@@ -180,7 +184,7 @@ export default function Hero({
 
                 <h3 className="mt-4 text-2xl font-bold text-white">
 
-                  Coming Soon
+                  {anniversaryCountdown}
 
                 </h3>
 
@@ -227,7 +231,7 @@ export default function Hero({
 
                 <h3 className="mt-3 text-4xl font-bold text-white">
 
-                  {stats.photos}
+                  {totalMemories}
 
                 </h3>
 
