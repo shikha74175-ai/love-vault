@@ -102,10 +102,10 @@ export function scheduleEventReminder(
 
   const timer = setTimeout(() => {
     try {
-      showPlannerNotification(
-        event
-      );
-    } catch (error) {
+  showPlannerNotification(
+    event.title
+  );
+} catch (error) {
       console.error(
         "Planner notification error:",
         error
