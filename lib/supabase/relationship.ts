@@ -21,34 +21,69 @@ export interface RelationshipInfo {
 }
 
 export async function getRelationshipInfo(): Promise<RelationshipInfo | null> {
+  // =========================
+  // Current User
+  // =========================
 
   const {
     data: { user },
+    error: authError,
   } = await supabase.auth.getUser();
+
+  if (authError) {
+    throw authError;
+  }
 
   if (!user) {
     throw new Error("User not authenticated");
   }
 
-  const { data: profile, error } = await supabase
-    .from("profiles")
-    .select("relationship_since")
-    .eq("id", user.id)
-    .single();
+  // =========================
+  // Get Relationship Date
+  // =========================
 
-  if (error) throw error;
+  const { data: profile, error: profileError } =
+    await supabase
+      .from("profiles")
+      .select(
+        "relationship_since, connected_at"
+      )
+      .eq("id", user.id)
+      .single();
 
-  if (!profile?.relationship_since) {
+  if (profileError) {
+    throw profileError;
+  }
+
+  // =========================
+  // Relationship Start
+  // =========================
+
+  // Prefer relationship_since.
+  // If it is NULL, use connected_at.
+  const relationshipDate =
+    profile?.relationship_since ??
+    profile?.connected_at;
+
+  if (!relationshipDate) {
     return null;
   }
 
-  const since = new Date(profile.relationship_since);
+  const since = new Date(
+    relationshipDate
+  );
+
+  if (Number.isNaN(since.getTime())) {
+    throw new Error(
+      "Invalid relationship start date."
+    );
+  }
 
   const today = new Date();
 
-  // -------------------------
+  // =========================
   // Years / Months / Days
-  // -------------------------
+  // =========================
 
   let years =
     today.getFullYear() -
@@ -63,7 +98,6 @@ export async function getRelationshipInfo(): Promise<RelationshipInfo | null> {
     since.getDate();
 
   if (days < 0) {
-
     months--;
 
     const lastMonth = new Date(
@@ -73,70 +107,85 @@ export async function getRelationshipInfo(): Promise<RelationshipInfo | null> {
     );
 
     days += lastMonth.getDate();
-
   }
 
   if (months < 0) {
-
     years--;
 
     months += 12;
-
   }
 
-  // -------------------------
+  // =========================
   // Total Days
-  // -------------------------
+  // =========================
 
   const totalDays = Math.floor(
-
-    (today.getTime() - since.getTime()) /
-
-    (1000 * 60 * 60 * 24)
-
+    (
+      today.getTime() -
+      since.getTime()
+    ) /
+      (1000 * 60 * 60 * 24)
   );
 
-  // -------------------------
+  // =========================
   // Next Anniversary
-  // -------------------------
+  // =========================
 
-  const anniversary = new Date(
+  let anniversary = new Date(
     today.getFullYear(),
     since.getMonth(),
     since.getDate()
   );
 
+  // If this year's anniversary
+  // has already passed, use next year.
   if (anniversary < today) {
-
-    anniversary.setFullYear(
-      anniversary.getFullYear() + 1
+    anniversary = new Date(
+      today.getFullYear() + 1,
+      since.getMonth(),
+      since.getDate()
     );
-
   }
 
-  const anniversaryLeft = Math.ceil(
-
-    (anniversary.getTime() -
-      today.getTime()) /
-
-      (1000 * 60 * 60 * 24)
-
+  const anniversaryLeft = Math.max(
+    0,
+    Math.ceil(
+      (
+        anniversary.getTime() -
+        today.getTime()
+      ) /
+        (1000 * 60 * 60 * 24)
+    )
   );
 
-  // -------------------------
+  // =========================
   // Next Milestone
-  // -------------------------
+  // =========================
 
-  const nextMilestone =
-    Math.ceil(totalDays / 100) * 100;
+  let nextMilestone =
+    Math.ceil(
+      totalDays / 100
+    ) * 100;
+
+  // If already exactly on a milestone,
+  // show the next milestone.
+  if (
+    nextMilestone <= totalDays
+  ) {
+    nextMilestone += 100;
+  }
 
   const milestoneLeft =
-    nextMilestone - totalDays;
+    nextMilestone -
+    totalDays;
+
+  // =========================
+  // Return
+  // =========================
 
   return {
-
     since:
-      profile.relationship_since,
+      relationshipDate,
 
     years,
 
@@ -154,7 +203,5 @@ export async function getRelationshipInfo(): Promise<RelationshipInfo | null> {
     nextMilestone,
 
     milestoneLeft,
-
   };
-
 }

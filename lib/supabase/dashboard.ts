@@ -14,29 +14,40 @@ export async function getDashboardData() {
     error: authError,
   } = await supabase.auth.getUser();
 
-  if (authError) throw authError;
+  // Session missing / auth error
+  if (authError || !user) {
+    console.warn(
+      "Dashboard: No authenticated user/session."
+    );
 
-  if (!user) {
-    throw new Error("User not authenticated");
+    return null;
   }
 
   // =========================
   // Profile
   // =========================
 
-  const { data: profile, error: profileError } = await supabase
+  const {
+    data: profile,
+    error: profileError,
+  } = await supabase
     .from("profiles")
     .select("*")
     .eq("id", user.id)
     .single();
 
-  if (profileError) throw profileError;
+  if (profileError) {
+    throw profileError;
+  }
 
   // =========================
   // Photos Count
   // =========================
 
-  const { count: photos, error: photosError } = await supabase
+  const {
+    count: photos,
+    error: photosError,
+  } = await supabase
     .from("vault_files")
     .select("*", {
       count: "exact",
@@ -46,13 +57,18 @@ export async function getDashboardData() {
     .eq("file_type", "image")
     .eq("deleted", false);
 
-  if (photosError) throw photosError;
+  if (photosError) {
+    throw photosError;
+  }
 
   // =========================
   // Videos Count
   // =========================
 
-  const { count: videos, error: videosError } = await supabase
+  const {
+    count: videos,
+    error: videosError,
+  } = await supabase
     .from("vault_files")
     .select("*", {
       count: "exact",
@@ -62,40 +78,50 @@ export async function getDashboardData() {
     .eq("file_type", "video")
     .eq("deleted", false);
 
-  if (videosError) throw videosError;
+  if (videosError) {
+    throw videosError;
+  }
 
   // =========================
   // Favorites Count
   // =========================
 
-  const { count: favorites, error: favoritesError } =
-    await supabase
-      .from("vault_files")
-      .select("*", {
-        count: "exact",
-        head: true,
-      })
-      .eq("user_id", user.id)
-      .eq("favorite", true)
-      .eq("deleted", false);
+  const {
+    count: favorites,
+    error: favoritesError,
+  } = await supabase
+    .from("vault_files")
+    .select("*", {
+      count: "exact",
+      head: true,
+    })
+    .eq("user_id", user.id)
+    .eq("favorite", true)
+    .eq("deleted", false);
 
-  if (favoritesError) throw favoritesError;
+  if (favoritesError) {
+    throw favoritesError;
+  }
 
   // =========================
   // Albums Count
   // =========================
 
-  const { count: albums, error: albumsError } =
-    await supabase
-      .from("vault_folders")
-      .select("*", {
-        count: "exact",
-        head: true,
-      })
-      .eq("user_id", user.id)
-      .eq("deleted", false);
+  const {
+    count: albums,
+    error: albumsError,
+  } = await supabase
+    .from("vault_folders")
+    .select("*", {
+      count: "exact",
+      head: true,
+    })
+    .eq("user_id", user.id)
+    .eq("deleted", false);
 
-  if (albumsError) throw albumsError;
+  if (albumsError) {
+    throw albumsError;
+  }
 
   // =========================
   // Recent Memories
@@ -114,7 +140,9 @@ export async function getDashboardData() {
     })
     .limit(6);
 
-  if (memoriesError) throw memoriesError;
+  if (memoriesError) {
+    throw memoriesError;
+  }
 
   // =========================
   // Recent Activities
@@ -122,45 +150,43 @@ export async function getDashboardData() {
 
   const activities =
     await getRecentActivities();
-    const aiMemory =
-  await getAIMemory();
-// =========================
-// Relationship
-// =========================
 
-const relationship =
-  await getRelationshipInfo();
+  // =========================
+  // AI Memory
+  // =========================
+
+  const aiMemory =
+    await getAIMemory();
+
+  // =========================
+  // Relationship
+  // =========================
+
+  const relationship =
+    await getRelationshipInfo();
+
   // =========================
   // Return
   // =========================
 
   return {
+    profile,
 
-  profile,
+    stats: {
+      photos: photos ?? 0,
+      videos: videos ?? 0,
+      albums: albums ?? 0,
+      favorites: favorites ?? 0,
+    },
 
-  stats: {
+    recentMemories:
+      recentMemories ?? [],
 
-    photos: photos ?? 0,
+    activities:
+      activities ?? [],
 
-    videos: videos ?? 0,
+    aiMemory,
 
-    albums: albums ?? 0,
-
-    favorites: favorites ?? 0,
-
-  },
-
-  recentMemories:
-    recentMemories ?? [],
-
-  activities:
-    activities ?? [],
-
-  aiMemory,
-
-  relationship,
-
-};
-
-
+    relationship,
+  };
 }

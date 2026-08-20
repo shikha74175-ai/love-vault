@@ -1,6 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useState,
+} from "react";
+
 import { getDashboardData } from "@/lib/supabase/dashboard";
 
 export type DashboardStats = {
@@ -60,63 +65,151 @@ const initialState: DashboardState = {
 
 export function useDashboard() {
   const [state, setState] =
-    useState<DashboardState>(initialState);
+    useState<DashboardState>(
+      initialState
+    );
 
-  const refreshDashboard = useCallback(async () => {
-    try {
-      setState((prev) => ({
-        ...prev,
-        loading: true,
-        error: null,
-      }));
+  const refreshDashboard =
+    useCallback(async () => {
 
-      const data = await getDashboardData();
+      try {
 
-      setState({
-        loading: false,
+        setState((prev) => ({
+          ...prev,
 
-        error: null,
+          loading: true,
 
-        profile: data.profile,
+          error: null,
+        }));
 
-        stats: data.stats,
+        const data =
+          await getDashboardData();
 
-        recentMemories:
-          data.recentMemories ?? [],
+        // =========================
+        // Authentication Missing
+        // =========================
 
-        activities:
-          data.activities ?? [],
+        if (!data) {
 
-        aiMemory:
-          data.aiMemory ?? null,
+          setState((prev) => ({
 
-        relationship:
-          data.relationship ?? null,
-      });
+            ...prev,
 
-    } catch (err: any) {
+            loading: false,
 
-      console.error("Dashboard Error:", err);
+            error:
+              "Your session has expired. Please login again.",
 
-      setState((prev) => ({
-        ...prev,
+            profile: null,
 
-        loading: false,
+            stats: {
+              photos: 0,
+              videos: 0,
+              albums: 0,
+              favorites: 0,
+            },
 
-        error:
-          err?.message ??
-          "Unable to load dashboard.",
-      }));
-    }
+            recentMemories: [],
 
-  }, []);
+            activities: [],
+
+            aiMemory: null,
+
+            relationship: null,
+
+          }));
+
+          return;
+        }
+
+        // =========================
+        // Dashboard Data
+        // =========================
+
+        setState({
+
+          loading: false,
+
+          error: null,
+
+          profile:
+            data.profile ?? null,
+
+          stats: {
+
+            photos:
+              data.stats?.photos ?? 0,
+
+            videos:
+              data.stats?.videos ?? 0,
+
+            albums:
+              data.stats?.albums ?? 0,
+
+            favorites:
+              data.stats?.favorites ?? 0,
+
+          },
+
+          recentMemories:
+            data.recentMemories ?? [],
+
+          activities:
+            data.activities ?? [],
+
+          aiMemory:
+            data.aiMemory ?? null,
+
+          relationship:
+            data.relationship ?? null,
+
+        });
+
+      } catch (err: unknown) {
+
+        console.error(
+          "Dashboard Error:",
+          err
+        );
+
+        const message =
+          err instanceof Error
+            ? err.message
+            : "Unable to load dashboard.";
+
+        setState((prev) => ({
+
+          ...prev,
+
+          loading: false,
+
+          error: message,
+
+        }));
+
+      }
+
+    }, []);
+
+  // =========================
+  // Initial Load
+  // =========================
 
   useEffect(() => {
+
     refreshDashboard();
+
   }, [refreshDashboard]);
 
+  // =========================
+  // Return
+  // =========================
+
   return {
+
     ...state,
+
     refreshDashboard,
+
   };
 }
