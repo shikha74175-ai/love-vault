@@ -1,10 +1,17 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import {
+  Suspense,
+  useEffect,
+  useState,
+} from "react";
+import {
+  useRouter,
+  useSearchParams,
+} from "next/navigation";
 import { updatePassword } from "@/services/auth";
 
-export default function ResetPasswordPage() {
+function ResetPasswordContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -99,10 +106,6 @@ export default function ResetPasswordPage() {
     }
   }
 
-  // =========================
-  // CHECKING RESET LINK
-  // =========================
-
   if (checkingLink) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-black px-4 text-white">
@@ -116,10 +119,6 @@ export default function ResetPasswordPage() {
       </main>
     );
   }
-
-  // =========================
-  // INVALID / EXPIRED LINK
-  // =========================
 
   if (linkError) {
     return (
@@ -141,7 +140,9 @@ export default function ResetPasswordPage() {
 
           <button
             type="button"
-            onClick={() => router.push("/login")}
+            onClick={() =>
+              router.push("/login")
+            }
             className="mt-6 w-full rounded-xl bg-pink-600 p-3 font-semibold text-white transition hover:bg-pink-700"
           >
             Back to Login
@@ -151,14 +152,9 @@ export default function ResetPasswordPage() {
     );
   }
 
-  // =========================
-  // RESET PASSWORD FORM
-  // =========================
-
   return (
     <main className="flex min-h-screen items-center justify-center bg-black px-4 text-white">
       <div className="w-full max-w-md rounded-3xl border border-zinc-800 bg-zinc-900 p-6 shadow-2xl sm:p-8">
-
         <div className="mb-7 text-center">
           <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-pink-500/10 text-xl">
             🔐
@@ -214,7 +210,9 @@ export default function ResetPasswordPage() {
               minLength={6}
               value={confirmPassword}
               onChange={(e) =>
-                setConfirmPassword(e.target.value)
+                setConfirmPassword(
+                  e.target.value
+                )
               }
               placeholder="Confirm new password"
               className="w-full rounded-xl border border-zinc-700 bg-zinc-800 p-3 text-white outline-none placeholder:text-zinc-600 focus:border-pink-500"
@@ -243,8 +241,31 @@ export default function ResetPasswordPage() {
               : "Update Password"}
           </button>
         </form>
-
       </div>
     </main>
+  );
+}
+
+function ResetPasswordLoading() {
+  return (
+    <main className="flex min-h-screen items-center justify-center bg-black px-4 text-white">
+      <div className="text-center">
+        <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-2 border-zinc-700 border-t-pink-500" />
+
+        <p className="text-sm text-zinc-500">
+          Loading...
+        </p>
+      </div>
+    </main>
+  );
+}
+
+export default function ResetPasswordPage() {
+  return (
+    <Suspense
+      fallback={<ResetPasswordLoading />}
+    >
+      <ResetPasswordContent />
+    </Suspense>
   );
 }
