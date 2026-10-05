@@ -4,6 +4,9 @@ import dynamic from "next/dynamic";
 import Image from "next/image";
 import { Fragment, useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/client";
+import { getFirebaseMessaging } from "@/lib/firebase";
+import { getToken } from "firebase/messaging";
+import { savePushToken } from "@/lib/supabase/pushTokens";
 import {
   Send,
   ImagePlus,
@@ -32,6 +35,7 @@ import {
   Camera,
   Bell,
   BellOff,
+  BellRing,
   EyeOff,
   Settings2,
 } from "lucide-react";
@@ -164,6 +168,10 @@ export default function ChatPage() {
   const [hideOnlineStatus, setHideOnlineStatus] = useState(false);
   const [hideLastSeen, setHideLastSeen] = useState(false);
   const [settingsSaving, setSettingsSaving] = useState(false);
+  const [notificationPermission, setNotificationPermission] = useState<NotificationPermission | "unsupported">("default");
+  const [notificationSound, setNotificationSound] = useState(true);
+  const [notificationBusy, setNotificationBusy] = useState(false);
+  const notifiedMessageIdsRef = useRef<Set<string>>(new Set());
 
   // ==========================
   // Auto Scroll
@@ -228,18 +236,27 @@ export default function ChatPage() {
     loadChat().finally(() => setChatInitialLoading(false));
   }, []);
 
-  // Restore local chat notification preference.
+  // Restore local chat notification preferences + browser permission.
   useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    if (!("Notification" in window)) {
+      setNotificationPermission("unsupported");
+    } else {
+      setNotificationPermission(Notification.permission);
+    }
+
     if (!myId) return;
     try {
       setMuted(localStorage.getItem(`couplenest-chat-muted-${myId}`) === "1");
+      setNotificationSound(localStorage.getItem(`couplenest-chat-sound-${myId}`) !== "0");
     } catch {
       // Ignore storage restrictions.
     }
   }, [myId]);
 
   // ==========================
-  // Realtime Messages
+  // Realtime Messages + New Message Notifications
   // ==========================
   useEffect(() => {
     if (!myId || !partnerId) return;
@@ -248,9 +265,32 @@ export default function ChatPage() {
       .channel(`messages-${myId}`)
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "messages" },
-        () => {
-          loadMessages(myId, partnerId);
+        { event: "INSERT", schema: "public", table: "messages" },
+        (payload) => {
+          const incoming = payload.new as {
+            id?: string;
+            sender_id?: string;
+            receiver_id?: string;
+            message?: string | null;
+            image_url?: string | null;
+            video_url?: string | null;
+            audio_url?: string | null;
+          };
+
+          const isPartnerMessage =
+            incoming.sender_id === partnerId && incoming.receiver_id === myId;
+
+          if (isPartnerMessage && incoming.id) {
+            void showIncomingMessageNotification({
+              id: incoming.id,
+              message: incoming.message,
+              image_url: incoming.image_url,
+              video_url: incoming.video_url,
+              audio_url: incoming.audio_url,
+            });
+          }
+
+          void loadMessages(myId, partnerId);
         }
       )
       .subscribe();
@@ -258,7 +298,7 @@ export default function ChatPage() {
     return () => {
       supabase.removeChannel(messageChannel);
     };
-  }, [myId, partnerId]);
+  }, [myId, partnerId, muted, notificationPermission, partnerName]);
 
   // ==========================
   // Partner Status Realtime
@@ -386,6 +426,149 @@ export default function ChatPage() {
     } catch {
       // Ignore storage restrictions.
     }
+  }
+
+  async function registerFirebasePushToken() {
+    if (typeof window === "undefined" || !myId) return null;
+
+    if (!("serviceWorker" in navigator)) {
+      console.warn("Service workers are not supported in this browser.");
+      return null;
+    }
+
+    const vapidKey = process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY;
+    if (!vapidKey) {
+      console.warn("NEXT_PUBLIC_FIREBASE_VAPID_KEY is missing.");
+      return null;
+    }
+
+    const registration = await navigator.serviceWorker.register(
+      "/firebase-messaging-sw.js",
+      { scope: "/" }
+    );
+
+    const messaging = await getFirebaseMessaging();
+    if (!messaging) {
+      console.warn("Firebase Messaging is not supported in this browser.");
+      return null;
+    }
+
+    const token = await getToken(messaging, {
+      vapidKey,
+      serviceWorkerRegistration: registration,
+    });
+
+    if (token) {
+      await savePushToken(myId, token, "web");
+
+      try {
+        localStorage.setItem(`couplenest-fcm-token-${myId}`, token);
+      } catch {
+        // Ignore storage restrictions.
+      }
+    }
+
+    return token || null;
+  }
+
+  async function enableNotifications() {
+    if (typeof window === "undefined" || !("Notification" in window)) {
+      setNotificationPermission("unsupported");
+      return;
+    }
+
+    setNotificationBusy(true);
+    try {
+      const permission = await Notification.requestPermission();
+      setNotificationPermission(permission);
+
+      if (permission === "granted") {
+        try {
+          const token = await registerFirebasePushToken();
+          if (token) {
+            console.info("CoupleNest FCM token registered on this device.");
+          }
+        } catch (error) {
+          console.error("Firebase push token registration failed:", error);
+        }
+      }
+    } catch (error) {
+      console.error("Notification permission request failed:", error);
+    } finally {
+      setNotificationBusy(false);
+    }
+  }
+
+  function toggleNotificationSound() {
+    const next = !notificationSound;
+    setNotificationSound(next);
+    try {
+      if (myId) localStorage.setItem(`couplenest-chat-sound-${myId}`, next ? "1" : "0");
+    } catch {
+      // Ignore storage restrictions.
+    }
+  }
+
+  async function showIncomingMessageNotification(message: {
+    id: string;
+    message?: string | null;
+    image_url?: string | null;
+    video_url?: string | null;
+    audio_url?: string | null;
+  }) {
+    if (typeof window === "undefined" || !("Notification" in window)) return;
+    if (Notification.permission !== "granted") return;
+    if (muted) return;
+
+    // If the user is already actively looking at CoupleNest Chat,
+    // the in-app realtime UI is enough and a browser notification is noisy.
+    if (document.visibilityState === "visible" && document.hasFocus()) return;
+
+    if (notifiedMessageIdsRef.current.has(message.id)) return;
+    notifiedMessageIdsRef.current.add(message.id);
+
+    // Keep this set bounded during long-running sessions.
+    if (notifiedMessageIdsRef.current.size > 200) {
+      const oldest = notifiedMessageIdsRef.current.values().next().value;
+      if (oldest) notifiedMessageIdsRef.current.delete(oldest);
+    }
+
+    let body = message.message?.trim() || "New message";
+    if (!message.message?.trim()) {
+      if (message.image_url) body = "📷 Photo";
+      else if (message.video_url) body = "🎥 Video";
+      else if (message.audio_url) body = "🎤 Voice message";
+    }
+
+    const notification = new Notification(partnerName || "Partner", {
+      body,
+      tag: `couplenest-message-${message.id}`,
+      silent: !notificationSound,
+    });
+
+    notification.onclick = () => {
+      window.focus();
+      window.location.href = "/chat";
+      notification.close();
+    };
+  }
+
+  function sendTestNotification() {
+    if (typeof window === "undefined" || !("Notification" in window)) return;
+    if (Notification.permission !== "granted") {
+      void enableNotifications();
+      return;
+    }
+
+    const notification = new Notification(partnerName || "CoupleNest", {
+      body: "Notifications are enabled ❤️",
+      tag: "couplenest-test-notification",
+    });
+
+    notification.onclick = () => {
+      window.focus();
+      notification.close();
+    };
   }
 
   async function updatePrivacySetting(
@@ -1312,6 +1495,63 @@ const expiresAt = disappearAfter
 
             <div className="space-y-3 px-4 pb-8 pt-5 sm:px-5">
               <div className="overflow-hidden rounded-2xl border border-white/[0.06] bg-white/[0.035]">
+                <div className="border-b border-white/[0.06] px-4 py-3">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-zinc-500">Notifications</p>
+                </div>
+
+                <div className="flex items-center gap-3 px-4 py-4">
+                  <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-pink-500/10 text-pink-300">
+                    {notificationPermission === "granted" ? <BellRing size={19} /> : <Bell size={19} />}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium text-white">Browser notifications</p>
+                    <p className="text-[11px] text-zinc-500">
+                      {notificationPermission === "granted"
+                        ? "Enabled on this browser."
+                        : notificationPermission === "denied"
+                          ? "Blocked. Allow notifications from your browser site settings."
+                          : notificationPermission === "unsupported"
+                            ? "This browser does not support notifications."
+                            : "Allow CoupleNest to notify you about new messages."}
+                    </p>
+                  </div>
+                  {notificationPermission === "granted" ? (
+                    <button
+                      type="button"
+                      onClick={sendTestNotification}
+                      className="rounded-xl border border-pink-400/10 bg-pink-500/10 px-3 py-2 text-[11px] font-semibold text-pink-200 transition hover:bg-pink-500/15"
+                    >
+                      Test
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      disabled={notificationBusy || notificationPermission === "denied" || notificationPermission === "unsupported"}
+                      onClick={enableNotifications}
+                      className="rounded-xl bg-gradient-to-r from-pink-500 to-fuchsia-600 px-3 py-2 text-[11px] font-semibold text-white shadow-lg shadow-pink-500/10 transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      {notificationBusy ? "..." : "Enable"}
+                    </button>
+                  )}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={toggleNotificationSound}
+                  className="flex w-full items-center gap-3 border-t border-white/[0.06] px-4 py-4 text-left transition hover:bg-white/[0.04]"
+                >
+                  <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-sky-500/10 text-sky-300">
+                    <Bell size={19} />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-sm font-medium text-white">Notification sound</span>
+                    <span className="block text-[11px] text-zinc-500">Local preference for this device.</span>
+                  </span>
+                  <span className={`h-5 w-9 rounded-full p-0.5 transition ${notificationSound ? "bg-pink-500" : "bg-zinc-700"}`}>
+                    <span className={`block h-4 w-4 rounded-full bg-white transition ${notificationSound ? "translate-x-4" : "translate-x-0"}`} />
+                  </span>
+                </button>
+
                 <button
                   type="button"
                   onClick={toggleMute}
