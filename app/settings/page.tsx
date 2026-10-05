@@ -14,6 +14,7 @@ import PrivacyCard from "./components/PrivacyCard";
 import SecurityCard from "./components/SecurityCard";
 import StorageCard from "./components/StorageCard";
 import DangerZone from "./components/DangerZone";
+import PasswordChangeModal from "./components/PasswordChangeModal";
 
 export default function SettingsPage() {
 
@@ -25,6 +26,10 @@ export default function SettingsPage() {
 
   const [userId, setUserId] =
     useState("");
+  const [
+  passwordModalOpen,
+  setPasswordModalOpen,
+] = useState(false);
 
   useEffect(() => {
 
@@ -114,20 +119,28 @@ removeVaultPin,
   }
 
   function changePassword() {
+  setPasswordModalOpen(true);
+}
 
-    alert(
-      "Password change feature coming soon."
-    );
+  async function logoutAllDevices() {
+  const ok = confirm(
+    "Logout from all devices?\n\nYou will need to login again."
+  );
 
+  if (!ok) return;
+
+  const { error } =
+    await supabase.auth.signOut({
+      scope: "global",
+    });
+
+  if (error) {
+    alert(error.message);
+    return;
   }
 
-  function logoutAllDevices() {
-
-    alert(
-      "Logout all devices will be added soon."
-    );
-
-  }
+  router.replace("/login");
+}
 
   function deleteAccount() {
 
@@ -237,6 +250,12 @@ removeVaultPin,
               logoutAllDevices
             }
           />
+          <PasswordChangeModal
+  open={passwordModalOpen}
+  onClose={() =>
+    setPasswordModalOpen(false)
+  }
+/>
 
           {/* Storage */}
 
