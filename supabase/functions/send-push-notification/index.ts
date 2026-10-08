@@ -26,6 +26,7 @@ type WebhookPayload = {
 
 function base64UrlEncode(value: string): string {
   const bytes = new TextEncoder().encode(value);
+
   let binary = "";
 
   for (const byte of bytes) {
@@ -96,6 +97,7 @@ async function createGoogleAccessToken(serviceAccount: {
   );
 
   const signatureBytes = new Uint8Array(signature);
+
   let binary = "";
 
   for (const byte of signatureBytes) {
@@ -240,6 +242,16 @@ async function deleteInvalidToken(
   );
 }
 
+/**
+ * Sends a DATA-ONLY FCM message.
+ *
+ * Important:
+ * We intentionally do NOT send the `notification` payload here.
+ * The Firebase Service Worker is responsible for displaying
+ * the notification using showNotification().
+ *
+ * This prevents duplicate notifications.
+ */
 async function sendFirebaseNotification(
   accessToken: string,
   projectId: string,
@@ -259,19 +271,10 @@ async function sendFirebaseNotification(
         message: {
           token,
 
-          notification: {
+          data: {
             title,
             body,
-          },
-
-          data: {
             url: "/chat",
-          },
-
-          webpush: {
-            fcm_options: {
-              link: "/chat",
-            },
           },
         },
       }),

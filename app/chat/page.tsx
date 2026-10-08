@@ -2226,281 +2226,756 @@ const expiresAt = disappearAfter
       )}
 
       {/* Input */}
-      <div
-  className="relative z-30 flex shrink-0 items-center gap-1.5 overflow-visible border-t border-white/[0.06] bg-zinc-950/90 px-2 pt-2 pb-[max(env(safe-area-inset-bottom),8px)] backdrop-blur-2xl sm:gap-2 sm:px-3 sm:py-3"
+<div
+  className="
+    relative z-30 shrink-0
+    border-t border-white/[0.06]
+    bg-zinc-950/95
+    px-2 pt-2
+    pb-[max(env(safe-area-inset-bottom),8px)]
+    backdrop-blur-2xl
+    sm:px-3 sm:py-3
+  "
 >
-        {/* Hidden File Input */}
-        <input
+  {/* Hidden gallery input */}
+  <input
     ref={fileInputRef}
     hidden
     type="file"
     accept="image/*,video/*"
-    onChange={(e)=>{
+    onChange={(e) => {
+      const file = e.target.files?.[0];
+      e.currentTarget.value = "";
 
-        const file=e.target.files?.[0];
+      if (!file) return;
 
-        if(!file) return;
-
-        if(file.type.startsWith("image")){
-
-            uploadImage(file);
-
-        }else if(file.type.startsWith("video")){
-
-            uploadVideo(file);
-
-        }
-
+      if (file.type.startsWith("image")) {
+        uploadImage(file);
+      } else if (file.type.startsWith("video")) {
+        uploadVideo(file);
+      }
     }}
-/>
+  />
 
-        <input
-          ref={cameraInputRef}
-          hidden
-          type="file"
-          accept="image/*"
-          capture="environment"
-          onChange={(e) => {
-            const file = e.target.files?.[0];
-            e.currentTarget.value = "";
-            if (!file) return;
-            uploadImage(file);
-          }}
-        />
+  {/* Hidden camera input */}
+  <input
+    ref={cameraInputRef}
+    hidden
+    type="file"
+    accept="image/*"
+    capture="environment"
+    onChange={(e) => {
+      const file = e.target.files?.[0];
+      e.currentTarget.value = "";
 
-        {!editingMessage && (
-          <div className="relative shrink-0">
+      if (!file) return;
+
+      uploadImage(file);
+    }}
+  />
+
+  {/* Reply / Edit preview */}
+  {(replyTo || editingMessage) && (
+    <div className="mb-2 flex items-start justify-between gap-3 rounded-2xl border border-white/[0.06] bg-white/[0.035] px-3 py-2">
+      <div className="min-w-0 flex-1">
+        <p className="text-xs font-semibold text-pink-400">
+          {editingMessage
+            ? "Editing message"
+            : `Replying to ${
+                replyTo?.sender_id === myId ? "yourself" : partnerName
+              }`}
+        </p>
+
+        <p className="truncate text-sm text-zinc-300">
+          {editingMessage
+            ? editingMessage.message
+            : replyTo?.message ||
+              (replyTo?.image_url
+                ? "📷 Photo"
+                : replyTo?.video_url
+                  ? "🎬 Video"
+                  : replyTo?.audio_url
+                    ? "🎤 Voice message"
+                    : "")}
+        </p>
+      </div>
+
+      <button
+        type="button"
+        onClick={editingMessage ? cancelEdit : cancelReply}
+        className="
+          mt-0.5 flex h-7 w-7 shrink-0
+          items-center justify-center
+          rounded-full
+          text-zinc-400
+          transition
+          hover:bg-white/[0.06]
+          hover:text-white
+        "
+        aria-label={editingMessage ? "Cancel edit" : "Cancel reply"}
+      >
+        <X size={17} />
+      </button>
+    </div>
+  )}
+
+  {/* Composer row */}
+  <div className="flex min-w-0 items-end gap-1.5 sm:gap-2">
+
+    {/* Attachment */}
+    {!editingMessage && (
+      <div className="relative shrink-0">
+        <button
+          type="button"
+          disabled={uploading || recording}
+          onClick={() =>
+            setShowAttachmentSheet((value) => !value)
+          }
+          aria-label="Attachments"
+          aria-expanded={showAttachmentSheet}
+          className="
+            flex h-10 w-10 shrink-0
+            items-center justify-center
+            rounded-full
+            border border-white/[0.07]
+            bg-white/[0.045]
+            text-zinc-300
+            transition
+            hover:bg-white/[0.08]
+            hover:text-white
+            active:scale-95
+            disabled:opacity-50
+            sm:h-11 sm:w-11
+          "
+        >
+          <Paperclip size={20} />
+        </button>
+
+        {showAttachmentSheet && (
+          <>
             <button
               type="button"
-              disabled={uploading}
-              onClick={() => setShowAttachmentSheet((v) => !v)}
-              aria-label="Attachments"
-              aria-expanded={showAttachmentSheet}
-              className="flex h-10 w-10 items-center justify-center rounded-full border border-white/[0.06] bg-white/[0.045] text-zinc-300 transition hover:bg-white/[0.08] hover:text-white active:scale-95 disabled:opacity-50 sm:h-11 sm:w-11"
-            >
-              <Paperclip size={21} />
-            </button>
+              aria-label="Close attachment menu"
+              className="
+                fixed inset-0 z-40
+                cursor-default
+                bg-black/10
+              "
+              onClick={() =>
+                setShowAttachmentSheet(false)
+              }
+            />
 
-            {showAttachmentSheet && (
-              <>
+            <div
+              className="
+                absolute
+                bottom-[calc(100%+10px)]
+                left-0
+                z-50
+                w-[min(320px,calc(100vw-16px))]
+                overflow-hidden
+                rounded-3xl
+                border border-white/[0.08]
+                bg-zinc-950/95
+                p-3
+                shadow-2xl
+                shadow-black/50
+                backdrop-blur-2xl
+                sm:w-80
+              "
+            >
+              <div className="mb-2 px-2 py-1">
+                <p className="text-sm font-semibold text-white">
+                  Share something
+                </p>
+
+                <p className="text-[11px] text-zinc-500">
+                  Private media stays inside your chat
+                </p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+
+                {/* Gallery */}
                 <button
                   type="button"
-                  aria-label="Close attachment menu"
-                  className="fixed inset-0 z-40 cursor-default bg-black/10"
-                  onClick={() => setShowAttachmentSheet(false)}
+                  disabled={uploading}
+                  onClick={() => {
+                    setShowAttachmentSheet(false);
+                    fileInputRef.current?.click();
+                  }}
+                  className="
+                    group flex items-center gap-3
+                    rounded-2xl
+                    border border-white/[0.06]
+                    bg-white/[0.04]
+                    p-3
+                    text-left
+                    transition
+                    hover:bg-white/[0.08]
+                    active:scale-[0.98]
+                    disabled:opacity-50
+                  "
+                >
+                  <span
+                    className="
+                      flex h-10 w-10
+                      items-center justify-center
+                      rounded-2xl
+                      bg-pink-500/15
+                      text-pink-300
+                    "
+                  >
+                    <Images size={20} />
+                  </span>
+
+                  <span className="min-w-0">
+                    <span className="block text-sm font-medium text-white">
+                      Gallery
+                    </span>
+
+                    <span className="block text-[10px] text-zinc-500">
+                      Photo or video
+                    </span>
+                  </span>
+                </button>
+
+                {/* Camera */}
+                <button
+                  type="button"
+                  disabled={uploading}
+                  onClick={() => {
+                    setShowAttachmentSheet(false);
+                    cameraInputRef.current?.click();
+                  }}
+                  className="
+                    group flex items-center gap-3
+                    rounded-2xl
+                    border border-white/[0.06]
+                    bg-white/[0.04]
+                    p-3
+                    text-left
+                    transition
+                    hover:bg-white/[0.08]
+                    active:scale-[0.98]
+                    disabled:opacity-50
+                  "
+                >
+                  <span
+                    className="
+                      flex h-10 w-10
+                      items-center justify-center
+                      rounded-2xl
+                      bg-fuchsia-500/15
+                      text-fuchsia-300
+                    "
+                  >
+                    <Camera size={20} />
+                  </span>
+
+                  <span className="min-w-0">
+                    <span className="block text-sm font-medium text-white">
+                      Camera
+                    </span>
+
+                    <span className="block text-[10px] text-zinc-500">
+                      Take a photo
+                    </span>
+                  </span>
+                </button>
+
+                {/* Voice */}
+                <button
+                  type="button"
+                  disabled={recording || uploading}
+                  onClick={() => {
+                    setShowAttachmentSheet(false);
+                    startRecording();
+                  }}
+                  className="
+                    group flex items-center gap-3
+                    rounded-2xl
+                    border border-white/[0.06]
+                    bg-white/[0.04]
+                    p-3
+                    text-left
+                    transition
+                    hover:bg-white/[0.08]
+                    active:scale-[0.98]
+                    disabled:opacity-50
+                  "
+                >
+                  <span
+                    className="
+                      flex h-10 w-10
+                      items-center justify-center
+                      rounded-2xl
+                      bg-emerald-500/15
+                      text-emerald-300
+                    "
+                  >
+                    <Mic size={20} />
+                  </span>
+
+                  <span className="min-w-0">
+                    <span className="block text-sm font-medium text-white">
+                      Voice
+                    </span>
+
+                    <span className="block text-[10px] text-zinc-500">
+                      Record a message
+                    </span>
+                  </span>
+                </button>
+
+                {/* Video */}
+                <button
+                  type="button"
+                  disabled={uploading}
+                  onClick={() => {
+                    setShowAttachmentSheet(false);
+                    fileInputRef.current?.click();
+                  }}
+                  className="
+                    group flex items-center gap-3
+                    rounded-2xl
+                    border border-white/[0.06]
+                    bg-white/[0.04]
+                    p-3
+                    text-left
+                    transition
+                    hover:bg-white/[0.08]
+                    active:scale-[0.98]
+                    disabled:opacity-50
+                  "
+                >
+                  <span
+                    className="
+                      flex h-10 w-10
+                      items-center justify-center
+                      rounded-2xl
+                      bg-sky-500/15
+                      text-sky-300
+                    "
+                  >
+                    <Video size={20} />
+                  </span>
+
+                  <span className="min-w-0">
+                    <span className="block text-sm font-medium text-white">
+                      Video
+                    </span>
+
+                    <span className="block text-[10px] text-zinc-500">
+                      Choose a video
+                    </span>
+                  </span>
+                </button>
+
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+    )}
+
+    {/* Recording */}
+    {recording ? (
+      <div
+        className="
+          flex min-w-0 flex-1
+          items-center gap-2
+          rounded-[22px]
+          border border-red-500/15
+          bg-red-500/[0.07]
+          px-2.5 py-1.5
+          sm:gap-3 sm:px-3
+        "
+      >
+        <span
+          className="
+            relative flex h-8 w-8 shrink-0
+            items-center justify-center
+            rounded-full
+            bg-red-500/15
+            text-red-300
+          "
+        >
+          <span
+            className="
+              absolute h-2.5 w-2.5
+              animate-pulse
+              rounded-full
+              bg-red-400
+            "
+          />
+        </span>
+
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center justify-between gap-2">
+            <span className="truncate text-[11px] font-semibold text-red-200 sm:text-xs">
+              Recording voice
+            </span>
+
+            <span className="shrink-0 font-mono text-[11px] tabular-nums text-red-300 sm:text-xs">
+              {formatRecordingTime(recordingSeconds)}
+            </span>
+          </div>
+
+          <div className="mt-1 flex h-4 items-center gap-1 overflow-hidden">
+            {[7,11,16,9,19,13,8,15,21,10,17,12].map(
+              (height, index) => (
+                <span
+                  key={index}
+                  className="
+                    w-1 shrink-0
+                    rounded-full
+                    bg-red-400/60
+                    animate-pulse
+                  "
+                  style={{
+                    height: `${height}px`,
+                    animationDelay: `${index * 45}ms`,
+                  }}
                 />
-
-                <div className="absolute bottom-[calc(100%+10px)] left-0 z-50 w-[min(320px,calc(100vw-20px))] overflow-hidden rounded-3xl border border-white/[0.08] bg-zinc-950/95 p-3 shadow-2xl shadow-black/40 backdrop-blur-2xl sm:w-80">
-                  <div className="mb-2 px-2 py-1">
-                    <p className="text-sm font-semibold text-white">Share something</p>
-                    <p className="text-[11px] text-zinc-500">Private media stays inside your chat</p>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      type="button"
-                      disabled={uploading}
-                      onClick={() => {
-                        setShowAttachmentSheet(false);
-                        fileInputRef.current?.click();
-                      }}
-                      className="group flex items-center gap-3 rounded-2xl border border-white/[0.06] bg-white/[0.04] p-3 text-left transition hover:bg-white/[0.08] active:scale-[0.98] disabled:opacity-50"
-                    >
-                      <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-pink-500/15 text-pink-300">
-                        <Images size={20} />
-                      </span>
-                      <span>
-                        <span className="block text-sm font-medium text-white">Gallery</span>
-                        <span className="block text-[10px] text-zinc-500">Photo or video</span>
-                      </span>
-                    </button>
-
-                    <button
-                      type="button"
-                      disabled={uploading}
-                      onClick={() => {
-                        setShowAttachmentSheet(false);
-                        cameraInputRef.current?.click();
-                      }}
-                      className="group flex items-center gap-3 rounded-2xl border border-white/[0.06] bg-white/[0.04] p-3 text-left transition hover:bg-white/[0.08] active:scale-[0.98] disabled:opacity-50"
-                    >
-                      <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-fuchsia-500/15 text-fuchsia-300">
-                        <Camera size={20} />
-                      </span>
-                      <span>
-                        <span className="block text-sm font-medium text-white">Camera</span>
-                        <span className="block text-[10px] text-zinc-500">Take a photo</span>
-                      </span>
-                    </button>
-
-                    <button
-                      type="button"
-                      disabled={recording || uploading}
-                      onClick={() => {
-                        setShowAttachmentSheet(false);
-                        startRecording();
-                      }}
-                      className="group flex items-center gap-3 rounded-2xl border border-white/[0.06] bg-white/[0.04] p-3 text-left transition hover:bg-white/[0.08] active:scale-[0.98] disabled:opacity-50"
-                    >
-                      <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-emerald-500/15 text-emerald-300">
-                        <Mic size={20} />
-                      </span>
-                      <span>
-                        <span className="block text-sm font-medium text-white">Voice</span>
-                        <span className="block text-[10px] text-zinc-500">Record a message</span>
-                      </span>
-                    </button>
-
-                    <button
-                      type="button"
-                      disabled={uploading}
-                      onClick={() => {
-                        setShowAttachmentSheet(false);
-                        fileInputRef.current?.click();
-                      }}
-                      className="group flex items-center gap-3 rounded-2xl border border-white/[0.06] bg-white/[0.04] p-3 text-left transition hover:bg-white/[0.08] active:scale-[0.98] disabled:opacity-50"
-                    >
-                      <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-sky-500/15 text-sky-300">
-                        <Video size={20} />
-                      </span>
-                      <span>
-                        <span className="block text-sm font-medium text-white">Video</span>
-                        <span className="block text-[10px] text-zinc-500">Choose a video</span>
-                      </span>
-                    </button>
-                  </div>
-                </div>
-              </>
+              )
             )}
           </div>
-        )}
-       <label
-className="
-hidden
-sm:flex
-items-center
-gap-2
-text-xs
-whitespace-nowrap
-"
->
-  <label className="flex sm:hidden items-center">
-
-<input
-type="checkbox"
-checked={viewOnce}
-onChange={(e)=>setViewOnce(e.target.checked)}
-/>
-
-</label>
-  <input
-    type="checkbox"
-    checked={viewOnce}
-    onChange={(e) => setViewOnce(e.target.checked)}
-  />
-  👁 View Once
-</label>
-
-        <div className="relative">
-          <button
-            type="button"
-            onClick={() => setShowEmoji((v) => !v)}
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/[0.06] bg-white/[0.045] text-zinc-300 transition hover:bg-white/[0.08] hover:text-white sm:h-11 sm:w-11"
-          >
-            <Smile size={22} />
-          </button>
-
-          {showEmoji && (
-            <div className="absolute bottom-full mb-2 left-0 z-50">
-              <EmojiPicker onEmojiClick={addEmoji} theme={"dark" as any} height={350} width={300} />
-            </div>
-          )}
         </div>
-        <div className="relative">
-  <select
-    value={disappearAfter ?? ""}
-    onChange={(e) =>
-      setDisappearAfter(
-        e.target.value ? Number(e.target.value) : null
-      )
-    }
-    className="h-10 max-w-[74px] shrink-0 rounded-full border border-white/[0.06] bg-white/[0.045] px-2 text-[11px] text-zinc-300 outline-none transition hover:bg-white/[0.08] sm:h-11 sm:max-w-none sm:px-3 sm:text-sm"
-  >
-    <option value="">♾️ Off</option>
-    <option value="3600">🕐 1 Hour</option>
-    <option value="86400">📅 24 Hours</option>
-    <option value="604800">🗓️ 7 Days</option>
-  </select>
-</div>
-
-        {!editingMessage && (
-          recording ? (
-            <div className="flex min-w-0 flex-1 items-center gap-2 rounded-2xl border border-red-500/15 bg-red-500/[0.07] px-2 py-1.5 sm:gap-3 sm:px-3">
-              <span className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-red-500/15 text-red-300">
-                <span className="absolute h-2.5 w-2.5 animate-pulse rounded-full bg-red-400" />
-              </span>
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-xs font-semibold text-red-200">Recording voice</span>
-                  <span className="font-mono text-xs tabular-nums text-red-300">{formatRecordingTime(recordingSeconds)}</span>
-                </div>
-                <div className="mt-1 flex h-4 items-center gap-1 overflow-hidden">
-                  {[7,11,16,9,19,13,8,15,21,10,17,12,20,8,14,18,11,16,9,13].map((h, i) => (
-                    <span key={i} className="w-1 shrink-0 rounded-full bg-red-400/60 animate-pulse" style={{ height: `${h}px`, animationDelay: `${i * 45}ms` }} />
-                  ))}
-                </div>
-              </div>
-              <button type="button" onClick={cancelRecording} aria-label="Cancel recording" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-zinc-400 transition hover:bg-white/[0.06] hover:text-white">
-                <X size={18} />
-              </button>
-              <button type="button" onClick={stopRecording} aria-label="Send voice message" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-pink-500 text-white shadow-lg shadow-pink-500/20 transition hover:scale-105 active:scale-95">
-                <Send size={16} />
-              </button>
-            </div>
-          ) : (
-            <button
-              type="button"
-              onClick={startRecording}
-              aria-label="Record voice message"
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-300 transition hover:bg-emerald-500/25 hover:scale-105 active:scale-95 sm:h-11 sm:w-11"
-            >
-              <Mic size={21} />
-            </button>
-          )
-        )}
-
-        <input
-          ref={inputRef}
-          value={text}
-          onChange={(e) => handleTyping(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              editingMessage ? saveEditedMessage() : sendMessage();
-            }
-            if (e.key === "Escape") {
-              editingMessage ? cancelEdit() : cancelReply();
-            }
-          }}
-          placeholder={editingMessage ? "Edit message..." : "Type a message..."}
-          className="min-w-0 flex-1 rounded-full border border-white/[0.07] bg-white/[0.045] px-4 py-2.5 text-[14px] text-white outline-none transition placeholder:text-zinc-500 focus:border-pink-500/30 focus:bg-white/[0.06] focus:ring-2 focus:ring-pink-500/10 sm:py-3 sm:text-sm"
-        />
 
         <button
           type="button"
-          disabled={uploading}
-          onClick={editingMessage ? saveEditedMessage : sendMessage}
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-pink-500 to-fuchsia-600 text-white shadow-[0_8px_25px_rgba(236,72,153,0.25)] transition duration-200 active:scale-95 hover:scale-105 hover:shadow-[0_10px_30px_rgba(236,72,153,0.35)] disabled:cursor-not-allowed disabled:opacity-40 sm:h-11 sm:w-11"
+          onClick={cancelRecording}
+          aria-label="Cancel recording"
+          className="
+            flex h-8 w-8 shrink-0
+            items-center justify-center
+            rounded-full
+            text-zinc-400
+            transition
+            hover:bg-white/[0.06]
+            hover:text-white
+            active:scale-95
+          "
         >
-          {uploading ? (
-            <Loader2 size={22} className="animate-spin" />
-          ) : editingMessage ? (
-            <Check size={22} />
-          ) : (
-            <Send size={22} />
-          )}
+          <X size={17} />
+        </button>
+
+        <button
+          type="button"
+          onClick={stopRecording}
+          aria-label="Send voice message"
+          className="
+            flex h-8 w-8 shrink-0
+            items-center justify-center
+            rounded-full
+            bg-pink-500
+            text-white
+            shadow-lg
+            shadow-pink-500/20
+            transition
+            hover:scale-105
+            active:scale-95
+          "
+        >
+          <Send size={15} />
         </button>
       </div>
+    ) : (
+      <>
+        {/* Main composer */}
+        <div
+          className="
+            relative flex min-w-0 flex-1
+            items-center
+            rounded-[22px]
+            border border-white/[0.07]
+            bg-white/[0.045]
+            transition
+            focus-within:border-pink-500/30
+            focus-within:bg-white/[0.06]
+            focus-within:ring-2
+            focus-within:ring-pink-500/10
+          "
+        >
 
+          {/* Emoji */}
+          {!editingMessage && (
+            <div className="relative shrink-0">
+              <button
+                type="button"
+                onClick={() =>
+                  setShowEmoji((value) => !value)
+                }
+                aria-label="Emoji"
+                className="
+                  flex h-10 w-10
+                  items-center justify-center
+                  rounded-full
+                  text-zinc-400
+                  transition
+                  hover:text-white
+                  active:scale-95
+                  sm:h-11 sm:w-11
+                "
+              >
+                <Smile size={21} />
+              </button>
+
+              {showEmoji && (
+                <>
+                  <button
+                    type="button"
+                    aria-label="Close emoji picker"
+                    className="
+                      fixed inset-0 z-[60]
+                      cursor-default
+                      bg-transparent
+                    "
+                    onClick={() =>
+                      setShowEmoji(false)
+                    }
+                  />
+
+                  <div
+                    className="
+                      fixed
+                      bottom-[calc(100%+8px)]
+                      left-1/2
+                      z-[70]
+                      -translate-x-1/2
+                      sm:absolute
+                      sm:left-0
+                      sm:translate-x-0
+                    "
+                  >
+                    <EmojiPicker
+                      onEmojiClick={addEmoji}
+                      theme={"dark" as any}
+                      height={350}
+                      width={300}
+                    />
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
+          {/* Text input */}
+          <input
+            ref={inputRef}
+            value={text}
+            onChange={(e) =>
+              handleTyping(e.target.value)
+            }
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+
+                editingMessage
+                  ? saveEditedMessage()
+                  : sendMessage();
+              }
+
+              if (e.key === "Escape") {
+                editingMessage
+                  ? cancelEdit()
+                  : cancelReply();
+              }
+            }}
+            placeholder={
+              editingMessage
+                ? "Edit message..."
+                : "Type a message..."
+            }
+            className="
+              min-w-0 flex-1
+              bg-transparent
+              px-0.5 py-2.5
+              text-[14px]
+              leading-5
+              text-white
+              outline-none
+              placeholder:text-zinc-500
+              sm:py-3
+              sm:text-sm
+            "
+          />
+
+          {/* View Once - desktop */}
+          {!editingMessage && (
+            <label
+              className="
+                hidden shrink-0
+                items-center gap-1.5
+                px-2
+                text-[11px]
+                text-zinc-400
+                sm:flex
+              "
+              title="View once"
+            >
+              <input
+                type="checkbox"
+                checked={viewOnce}
+                onChange={(e) =>
+                  setViewOnce(e.target.checked)
+                }
+                className="
+                  h-3.5 w-3.5
+                  accent-pink-500
+                "
+              />
+
+              <span>👁</span>
+
+              <span className="hidden lg:inline">
+                View Once
+              </span>
+            </label>
+          )}
+
+          {/* Disappearing messages - desktop */}
+          {!editingMessage && (
+            <select
+              value={disappearAfter ?? ""}
+              onChange={(e) =>
+                setDisappearAfter(
+                  e.target.value
+                    ? Number(e.target.value)
+                    : null
+                )
+              }
+              aria-label="Disappearing message duration"
+              className="
+                hidden
+                h-9
+                max-w-[92px]
+                shrink-0
+                rounded-full
+                border border-white/[0.06]
+                bg-transparent
+                px-2
+                text-[11px]
+                text-zinc-400
+                outline-none
+                transition
+                hover:bg-white/[0.06]
+                sm:block
+                sm:h-10
+                sm:max-w-none
+                sm:px-2.5
+                sm:text-xs
+              "
+            >
+              <option value="">♾️ Off</option>
+              <option value="3600">
+                🕐 1 Hour
+              </option>
+              <option value="86400">
+                📅 24 Hours
+              </option>
+              <option value="604800">
+                🗓️ 7 Days
+              </option>
+            </select>
+          )}
+        </div>
+
+        {/* Save / Send / Mic */}
+        {editingMessage ? (
+          <button
+            type="button"
+            disabled={uploading}
+            onClick={saveEditedMessage}
+            aria-label="Save edited message"
+            className="
+              flex h-10 w-10 shrink-0
+              items-center justify-center
+              rounded-full
+              bg-gradient-to-br
+              from-pink-500
+              to-fuchsia-600
+              text-white
+              shadow-[0_8px_25px_rgba(236,72,153,0.25)]
+              transition
+              hover:scale-105
+              active:scale-95
+              disabled:cursor-not-allowed
+              disabled:opacity-40
+              sm:h-11 sm:w-11
+            "
+          >
+            {uploading ? (
+              <Loader2
+                size={20}
+                className="animate-spin"
+              />
+            ) : (
+              <Check size={20} />
+            )}
+          </button>
+        ) : text.trim() ? (
+          <button
+            type="button"
+            disabled={uploading}
+            onClick={sendMessage}
+            aria-label="Send message"
+            className="
+              flex h-10 w-10 shrink-0
+              items-center justify-center
+              rounded-full
+              bg-gradient-to-br
+              from-pink-500
+              to-fuchsia-600
+              text-white
+              shadow-[0_8px_25px_rgba(236,72,153,0.25)]
+              transition
+              duration-200
+              hover:scale-105
+              hover:shadow-[0_10px_30px_rgba(236,72,153,0.35)]
+              active:scale-95
+              disabled:cursor-not-allowed
+              disabled:opacity-40
+              sm:h-11 sm:w-11
+            "
+          >
+            {uploading ? (
+              <Loader2
+                size={20}
+                className="animate-spin"
+              />
+            ) : (
+              <Send size={20} />
+            )}
+          </button>
+        ) : (
+          <button
+            type="button"
+            disabled={uploading}
+            onClick={startRecording}
+            aria-label="Record voice message"
+            className="
+              flex h-10 w-10 shrink-0
+              items-center justify-center
+              rounded-full
+              bg-emerald-500/15
+              text-emerald-300
+              transition
+              hover:bg-emerald-500/25
+              hover:scale-105
+              active:scale-95
+              disabled:opacity-50
+              sm:h-11 sm:w-11
+            "
+          >
+            <Mic size={20} />
+          </button>
+        )}
+      </>
+    )}
+  </div>
+</div>
       {/* Image Preview */}
       {previewImage && (
         <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center">
