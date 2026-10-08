@@ -3,19 +3,29 @@ import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
+    "authorization, x-client-info, apikey, content-type, x-push-webhook-secret",
 };
 
-type PushRequest = {
-  token: string;
-  title: string;
-  body: string;
-  url?: string;
+type MessageRecord = {
+  id?: string;
+  sender_id?: string;
+  receiver_id?: string;
+  message?: string | null;
+  image_url?: string | null;
+  video_url?: string | null;
+  audio_url?: string | null;
+  file_type?: string | null;
+};
+
+type WebhookPayload = {
+  type?: string;
+  table?: string;
+  schema?: string;
+  record?: MessageRecord;
 };
 
 function base64UrlEncode(value: string): string {
   const bytes = new TextEncoder().encode(value);
-
   let binary = "";
 
   for (const byte of bytes) {
@@ -86,7 +96,6 @@ async function createGoogleAccessToken(serviceAccount: {
   );
 
   const signatureBytes = new Uint8Array(signature);
-
   let binary = "";
 
   for (const byte of signatureBytes) {
@@ -125,86 +134,251 @@ async function createGoogleAccessToken(serviceAccount: {
   return data.access_token as string;
 }
 
+async function getPushTokens(
+  supabaseUrl: string,
+  serviceRoleKey: string,
+  userId: string,
+) {
+  const url =
+    `${supabaseUrl}/rest/v1/push_tokens` +
+    `?select=id,token` +
+    `&user_id=eq.${encodeURIComponent(userId)}`;
+
+  const response = await fetch(url, {
+    headers: {
+      apikey: serviceRoleKey,
+      Authorization: `Bearer ${serviceRoleKey}`,
+    },
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    console.error("Supabase token lookup error:", data);
+    throw new Error("Unable to load push tokens.");
+  }
+
+  return data as Array<{
+    id: string;
+    token: string;
+  }>;
+}
+
+async function getSenderName(
+  supabaseUrl: string,
+  serviceRoleKey: string,
+  senderId: string,
+) {
+  const url =
+    `${supabaseUrl}/rest/v1/profiles` +
+    `?select=full_name,username` +
+    `&id=eq.${encodeURIComponent(senderId)}` +
+    `&limit=1`;
+
+  const response = await fetch(url, {
+    headers: {
+      apikey: serviceRoleKey,
+      Authorization: `Bearer ${serviceRoleKey}`,
+    },
+  });
+
+  if (!response.ok) {
+    return "Your partner";
+  }
+
+  const data = await response.json();
+
+  if (!Array.isArray(data) || !data[0]) {
+    return "Your partner";
+  }
+
+  return (
+    data[0].full_name ||
+    data[0].username ||
+    "Your partner"
+  );
+}
+
+function getNotificationBody(record: MessageRecord) {
+  if (record.message?.trim()) {
+    return record.message.trim().slice(0, 180);
+  }
+
+  if (record.image_url) {
+    return "📷 Sent you a photo";
+  }
+
+  if (record.video_url) {
+    return "🎥 Sent you a video";
+  }
+
+  if (record.audio_url) {
+    return "🎤 Sent you a voice message";
+  }
+
+  if (record.file_type === "document") {
+    return "📎 Sent you a file";
+  }
+
+  return "You have a new message ❤️";
+}
+
+async function deleteInvalidToken(
+  supabaseUrl: string,
+  serviceRoleKey: string,
+  tokenId: string,
+) {
+  await fetch(
+    `${supabaseUrl}/rest/v1/push_tokens?id=eq.${encodeURIComponent(tokenId)}`,
+    {
+      method: "DELETE",
+      headers: {
+        apikey: serviceRoleKey,
+        Authorization: `Bearer ${serviceRoleKey}`,
+      },
+    },
+  );
+}
+
+async function sendFirebaseNotification(
+  accessToken: string,
+  projectId: string,
+  token: string,
+  title: string,
+  body: string,
+) {
+  return fetch(
+    `https://fcm.googleapis.com/v1/projects/${projectId}/messages:send`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        message: {
+          token,
+
+          notification: {
+            title,
+            body,
+          },
+
+          data: {
+            url: "/chat",
+          },
+
+          webpush: {
+            fcm_options: {
+              link: "/chat",
+            },
+          },
+        },
+      }),
+    },
+  );
+}
+
 serve(async (req) => {
+  /*
+   * Webhook security
+   *
+   * The Database Webhook must send:
+   *
+   * x-push-webhook-secret: <same secret stored in Supabase>
+   */
+
   if (req.method === "OPTIONS") {
     return new Response("ok", {
       headers: corsHeaders,
     });
   }
 
-  try {
-    const serviceAccountRaw = Deno.env.get(
-      "FIREBASE_SERVICE_ACCOUNT",
-    );
+  const webhookSecret =
+    Deno.env.get("PUSH_WEBHOOK_SECRET");
 
-    if (!serviceAccountRaw) {
+  const incomingSecret =
+    req.headers.get("x-push-webhook-secret");
+
+  if (
+    !webhookSecret ||
+    !incomingSecret ||
+    incomingSecret !== webhookSecret
+  ) {
+    return new Response(
+      JSON.stringify({
+        success: false,
+        error: "Unauthorized",
+      }),
+      {
+        status: 401,
+        headers: {
+          ...corsHeaders,
+          "Content-Type": "application/json",
+        },
+      },
+    );
+  }
+
+  try {
+    const supabaseUrl =
+      Deno.env.get("SUPABASE_URL");
+
+    const serviceRoleKey =
+      Deno.env.get("supabase_service_role_key");
+
+    const firebaseServiceAccountRaw =
+      Deno.env.get("FIREBASE_SERVICE_ACCOUNT");
+
+    if (!supabaseUrl) {
+      throw new Error("SUPABASE_URL is missing.");
+    }
+
+    if (!serviceRoleKey) {
+      throw new Error(
+        "supabase_service_role_key secret is missing.",
+      );
+    }
+
+    if (!firebaseServiceAccountRaw) {
       throw new Error(
         "FIREBASE_SERVICE_ACCOUNT secret is missing.",
       );
     }
 
-    const serviceAccount = JSON.parse(serviceAccountRaw);
+    const serviceAccount =
+      JSON.parse(firebaseServiceAccountRaw);
 
-    const payload = (await req.json()) as PushRequest;
+    const payload =
+      (await req.json()) as WebhookPayload;
 
-    if (!payload.token) {
-      throw new Error("FCM token is required.");
+    const record = payload.record;
+
+    if (!record) {
+      throw new Error(
+        "Webhook record is missing.",
+      );
     }
 
-    if (!payload.title) {
-      throw new Error("Notification title is required.");
+    if (!record.receiver_id) {
+      throw new Error(
+        "receiver_id is missing.",
+      );
     }
 
-    if (!payload.body) {
-      throw new Error("Notification body is required.");
-    }
-
-    const accessToken =
-      await createGoogleAccessToken(serviceAccount);
-
-    const firebaseResponse = await fetch(
-      `https://fcm.googleapis.com/v1/projects/${serviceAccount.project_id}/messages:send`,
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          message: {
-            token: payload.token,
-
-            notification: {
-              title: payload.title,
-              body: payload.body,
-            },
-
-            data: {
-              url: payload.url || "/chat",
-            },
-
-            webpush: {
-              fcm_options: {
-                link: payload.url || "/chat",
-              },
-            },
-          },
-        }),
-      },
-    );
-
-    const firebaseData = await firebaseResponse.json();
-
-    if (!firebaseResponse.ok) {
-      console.error("FCM error:", firebaseData);
-
+    // Never notify the sender.
+    if (
+      record.sender_id &&
+      record.sender_id === record.receiver_id
+    ) {
       return new Response(
         JSON.stringify({
-          success: false,
-          error: firebaseData,
+          success: true,
+          skipped: true,
+          reason: "sender_is_receiver",
         }),
         {
-          status: firebaseResponse.status,
+          status: 200,
           headers: {
             ...corsHeaders,
             "Content-Type": "application/json",
@@ -213,10 +387,103 @@ serve(async (req) => {
       );
     }
 
+    const tokens = await getPushTokens(
+      supabaseUrl,
+      serviceRoleKey,
+      record.receiver_id,
+    );
+
+    if (!tokens.length) {
+      return new Response(
+        JSON.stringify({
+          success: true,
+          sent: 0,
+          reason: "no_push_tokens",
+        }),
+        {
+          status: 200,
+          headers: {
+            ...corsHeaders,
+            "Content-Type": "application/json",
+          },
+        },
+      );
+    }
+
+    const senderName = record.sender_id
+      ? await getSenderName(
+          supabaseUrl,
+          serviceRoleKey,
+          record.sender_id,
+        )
+      : "Your partner";
+
+    const body =
+      getNotificationBody(record);
+
+    const accessToken =
+      await createGoogleAccessToken(
+        serviceAccount,
+      );
+
+    let sent = 0;
+    let removed = 0;
+
+    for (const pushToken of tokens) {
+      try {
+        const response =
+          await sendFirebaseNotification(
+            accessToken,
+            serviceAccount.project_id,
+            pushToken.token,
+            senderName,
+            body,
+          );
+
+        if (response.ok) {
+          sent++;
+          continue;
+        }
+
+        const errorData =
+          await response.json();
+
+        console.error(
+          "FCM send error:",
+          errorData,
+        );
+
+        const errorText =
+          JSON.stringify(errorData);
+
+        if (
+          errorText.includes("UNREGISTERED") ||
+          errorText.includes(
+            "registration-token-not-registered",
+          )
+        ) {
+          await deleteInvalidToken(
+            supabaseUrl,
+            serviceRoleKey,
+            pushToken.id,
+          );
+
+          removed++;
+        }
+      } catch (error) {
+        console.error(
+          "Token send failed:",
+          error,
+        );
+      }
+    }
+
     return new Response(
       JSON.stringify({
         success: true,
-        message: firebaseData,
+        sent,
+        removed,
+        totalTokens: tokens.length,
       }),
       {
         status: 200,
@@ -227,7 +494,10 @@ serve(async (req) => {
       },
     );
   } catch (error) {
-    console.error("Push function error:", error);
+    console.error(
+      "Push function error:",
+      error,
+    );
 
     return new Response(
       JSON.stringify({

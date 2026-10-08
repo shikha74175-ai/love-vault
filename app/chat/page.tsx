@@ -429,47 +429,204 @@ export default function ChatPage() {
   }
 
   async function registerFirebasePushToken() {
-    if (typeof window === "undefined" || !myId) return null;
+    if (typeof window === "undefined" || !myId) {
+      throw new Error("Browser or logged-in user is missing.");
+    }
+
+    console.log("[FCM] Starting token registration...");
 
     if (!("serviceWorker" in navigator)) {
-      console.warn("Service workers are not supported in this browser.");
-      return null;
+      throw new Error("Service workers are not supported in this browser.");
     }
 
+    console.log("[FCM] Service Worker API: OK");
+
     const vapidKey = process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY;
+
     if (!vapidKey) {
-      console.warn("NEXT_PUBLIC_FIREBASE_VAPID_KEY is missing.");
-      return null;
+      throw new Error("NEXT_PUBLIC_FIREBASE_VAPID_KEY is missing.");
     }
+
+    console.log("[FCM] VAPID key: found");
 
     const registration = await navigator.serviceWorker.register(
       "/firebase-messaging-sw.js",
       { scope: "/" }
     );
 
+    console.log("[FCM] Service Worker registered:", {
+      scope: registration.scope,
+      active: Boolean(registration.active),
+      waiting: Boolean(registration.waiting),
+      installing: Boolean(registration.installing),
+    });
+
     const messaging = await getFirebaseMessaging();
+
     if (!messaging) {
-      console.warn("Firebase Messaging is not supported in this browser.");
-      return null;
+      throw new Error(
+        "Firebase Messaging is not supported in this browser."
+      );
     }
+
+    console.log("[FCM] Firebase Messaging: OK");
 
     const token = await getToken(messaging, {
       vapidKey,
       serviceWorkerRegistration: registration,
     });
 
-    if (token) {
-      await savePushToken(myId, token, "web");
-
-      try {
-        localStorage.setItem(`couplenest-fcm-token-${myId}`, token);
-      } catch {
-        // Ignore storage restrictions.
-      }
+    if (!token) {
+      throw new Error("Firebase getToken() returned an empty token.");
     }
 
-    return token || null;
+    // Never print the actual FCM token to the console.
+    console.log("[FCM] Token generated successfully.", {
+      length: token.length,
+    });
+
+    const savedToken = await savePushToken(
+      myId,
+      token,
+      "web"
+    );
+
+    console.log("[FCM] Supabase push_tokens upsert: SUCCESS", {
+      id: savedToken?.id,
+      user_id: savedToken?.user_id,
+      platform: savedToken?.platform,
+    });
+
+    try {
+      localStorage.setItem(
+        `couplenest-fcm-token-${myId}`,
+        token
+      );
+    } catch {
+      // Ignore storage restrictions.
+    }
+
+    return token;
   }
+
+  async function debugFirebasePush() {
+    console.clear();
+
+    console.log(
+      "========== CoupleNest FCM DEBUG =========="
+    );
+
+    try {
+      console.log("1. Browser capabilities:", {
+        Notification: "Notification" in window,
+        ServiceWorker: "serviceWorker" in navigator,
+        permission:
+          "Notification" in window
+            ? Notification.permission
+            : "unsupported",
+      });
+
+      const {
+        data: { user },
+        error: authError,
+      } = await supabase.auth.getUser();
+
+      console.log("2. Supabase auth:", {
+        loggedIn: Boolean(user),
+        userId: user?.id || null,
+        error: authError?.message || null,
+      });
+
+      if (!user) {
+        throw new Error("No logged-in Supabase user found.");
+      }
+
+      if (!("Notification" in window)) {
+        throw new Error(
+          "This browser does not support Notifications."
+        );
+      }
+
+      if (Notification.permission !== "granted") {
+        throw new Error(
+          `Notification permission is "${Notification.permission}". Click Enable first.`
+        );
+      }
+
+      console.log("3. Notification permission: GRANTED");
+
+      const token = await registerFirebasePushToken();
+
+      console.log("4. FCM registration: SUCCESS", {
+        tokenGenerated: Boolean(token),
+      });
+
+      const {
+        data: savedRows,
+        error: savedRowsError,
+      } = await supabase
+        .from("push_tokens")
+        .select("id,user_id,platform,created_at,updated_at")
+        .eq("user_id", user.id)
+        .eq("platform", "web")
+        .order("created_at", { ascending: false });
+
+      if (savedRowsError) {
+        throw new Error(
+          `Supabase verification failed: ${savedRowsError.message}`
+        );
+      }
+
+      console.log("5. Supabase push_tokens rows:", {
+        count: savedRows?.length ?? 0,
+        rows: savedRows ?? [],
+      });
+
+      if (!savedRows?.length) {
+        throw new Error(
+          "FCM token was generated, but no push_tokens row was found."
+        );
+      }
+
+      console.log(
+        "🎉 FCM DEBUG COMPLETE — token is registered in Supabase."
+      );
+    } catch (error) {
+      console.error("❌ FCM DEBUG FAILED:", error);
+    }
+
+    console.log(
+      "=========================================="
+    );
+  }
+
+  // Automatically register FCM when browser permission is already granted.
+  // This is important because Notification.permission can be "granted"
+  // from an earlier session, so the user may never press Enable again.
+  useEffect(() => {
+    if (!myId || notificationPermission !== "granted") return;
+
+    let cancelled = false;
+
+    void registerFirebasePushToken()
+      .then(() => {
+        if (!cancelled) {
+          console.info("[FCM] Automatic registration completed.");
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          console.error(
+            "[FCM] Automatic registration failed:",
+            error
+          );
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [myId, notificationPermission]);
 
   async function enableNotifications() {
     if (typeof window === "undefined" || !("Notification" in window)) {
@@ -1516,13 +1673,24 @@ const expiresAt = disappearAfter
                     </p>
                   </div>
                   {notificationPermission === "granted" ? (
-                    <button
-                      type="button"
-                      onClick={sendTestNotification}
-                      className="rounded-xl border border-pink-400/10 bg-pink-500/10 px-3 py-2 text-[11px] font-semibold text-pink-200 transition hover:bg-pink-500/15"
-                    >
-                      Test
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={sendTestNotification}
+                        className="rounded-xl border border-pink-400/10 bg-pink-500/10 px-3 py-2 text-[11px] font-semibold text-pink-200 transition hover:bg-pink-500/15"
+                      >
+                        Test
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={debugFirebasePush}
+                        disabled={notificationBusy}
+                        className="rounded-xl border border-emerald-400/20 bg-emerald-500/15 px-3 py-2 text-[11px] font-semibold text-emerald-200 transition hover:bg-emerald-500/25 disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        Debug FCM
+                      </button>
+                    </div>
                   ) : (
                     <button
                       type="button"
