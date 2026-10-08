@@ -785,49 +785,60 @@ export default function ChatPage() {
   // Load Chat
   // ==========================
   async function loadChat() {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
-    if (!user) return;
+  if (!user) return;
 
-    setMyId(user.id);
+  setMyId(user.id);
 
-    await supabase
-      .from("profiles")
-      .update({ is_online: true, last_seen: new Date().toISOString() })
-      .eq("id", user.id);
+  await supabase
+    .from("profiles")
+    .update({
+      is_online: true,
+      last_seen: new Date().toISOString(),
+    })
+    .eq("id", user.id);
 
-    const { data: profile, error } = await supabase
-      .from("profiles")
-      .select("partner_id,hide_online_status,hide_last_seen")
-      .eq("id", user.id)
-      .single();
+  const { data: profile, error } = await supabase
+    .from("profiles")
+    .select("partner_id")
+    .eq("id", user.id)
+    .single();
 
-    if (error || !profile?.partner_id) {
-      alert("No partner connected.");
-      return;
-    }
-
-    setPartnerId(profile.partner_id);
-    setHideOnlineStatus(Boolean(profile.hide_online_status));
-    setHideLastSeen(Boolean(profile.hide_last_seen));
-
-    const { data: partner } = await supabase
-      .from("profiles")
-      .select("username,is_online,last_seen")
-      .eq("id", profile.partner_id)
-      .single();
-
-    if (partner) {
-      setPartnerName(partner.username || "Partner");
-      setOnline(partner.is_online);
-      setLastSeen(partner.last_seen || "");
-    }
-
-    await loadMessages(user.id, profile.partner_id);
+  if (error || !profile?.partner_id) {
+    alert("No partner connected.");
+    return;
   }
 
+  setPartnerId(profile.partner_id);
+
+  // Get partner profile
+  const { data: partner, error: partnerError } = await supabase
+    .from("profiles")
+    .select("full_name,username,is_online,last_seen")
+    .eq("id", profile.partner_id)
+    .single();
+
+  if (partnerError) {
+    console.error("Partner profile error:", partnerError);
+  }
+
+  if (partner) {
+    // Profile Name first, username only as fallback
+    setPartnerName(
+      partner.full_name?.trim() ||
+      partner.username?.trim() ||
+      "Partner"
+    );
+
+    setOnline(partner.is_online);
+    setLastSeen(partner.last_seen || "");
+  }
+
+  await loadMessages(user.id, profile.partner_id);
+}
   // ==========================
   // Load Messages
   // ==========================
