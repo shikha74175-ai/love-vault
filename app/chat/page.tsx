@@ -92,10 +92,144 @@ export default function ChatPage() {
   // Current User
   const [myId, setMyId] = useState("");
   const [viewOnce, setViewOnce] = useState(false);
+  const [pendingImageFile, setPendingImageFile] = useState<File | null>(null);
+  const [pendingImageViewOnce, setPendingImageViewOnce] = useState(false);
 
   // Partner
   const [partnerId, setPartnerId] = useState("");
   const [partnerName, setPartnerName] = useState("");
+  const [partnerAvatar, setPartnerAvatar] = useState<string | null>(null);
+  const [showPartnerPhoto, setShowPartnerPhoto] = useState(false);
+
+  // Resolve the partner avatar from Supabase Storage or an external URL.
+  async function resolvePartnerAvatar(value: string | null | undefined) {
+    const rawValue = value?.trim();
+
+    if (!rawValue) {
+      setPartnerAvatar(null);
+      return;
+    }
+
+    const extractAvatarPath = (input: string): string | null => {
+      try {
+        const parsed = new URL(input);
+        const marker = "/storage/v1/object/";
+        const markerIndex = parsed.pathname.indexOf(marker);
+        if (markerIndex < 0) return null;
+
+        const objectPart = parsed.pathname.slice(markerIndex + marker.length);
+        const parts = objectPart.split("/").filter(Boolean);
+        const bucketIndex = parts.findIndex((part) => part === "avatars");
+        if (bucketIndex < 0 || bucketIndex >= parts.length - 1) return null;
+
+        return parts.slice(bucketIndex + 1).map((part) => {
+          try { return decodeURIComponent(part); } catch { return part; }
+        }).join("/");
+      } catch {
+        return null;
+      }
+    };
+
+    const isUrl = /^https?:\/\//i.test(rawValue);
+    const pathFromUrl = isUrl ? extractAvatarPath(rawValue) : null;
+
+    // External URLs don't need to be signed by Supabase.
+    if (isUrl && !pathFromUrl) {
+      setPartnerAvatar(rawValue);
+      return;
+    }
+
+    const originalPath = (pathFromUrl ?? rawValue).replace(/^\/+/, "");
+    // Support values saved either as "user-id/avatar.png" or "avatars/user-id/avatar.png".
+    // Supabase Storage object names are case-sensitive, so try common extension-case variants too
+    // (for example, avatar.png vs avatar.PNG).
+    const basePaths = [...new Set([
+      originalPath,
+      originalPath.replace(/^avatars\//i, ""),
+    ].filter(Boolean))];
+
+    const pathsToTry = [...new Set(basePaths.flatMap((candidate) => {
+      const candidates = [candidate];
+      const match = candidate.match(/\.(png|jpe?g|webp|gif|avif)$/i);
+      if (match) {
+        const extensionStart = candidate.length - match[0].length;
+        const stem = candidate.slice(0, extensionStart);
+        const extension = match[1];
+        candidates.push(`${stem}.${extension.toLowerCase()}`);
+        candidates.push(`${stem}.${extension.toUpperCase()}`);
+        candidates.push(`${stem}.${extension[0].toUpperCase()}${extension.slice(1).toLowerCase()}`);
+      }
+      return candidates;
+    }))];
+
+    let lastError: unknown = null;
+    for (const path of pathsToTry) {
+      const { data, error } = await supabase.storage
+        .from("avatars")
+        .createSignedUrl(path, 3600);
+
+      if (!error && data?.signedUrl) {
+        setPartnerAvatar(data.signedUrl);
+        return;
+      }
+      lastError = error;
+    }
+
+    // Fallback: the database may contain an outdated filename. List the
+    // expected folder and try actual image objects returned by Storage.
+    // This requires the current user's Storage policies to allow listing.
+    const expectedFolder = originalPath.includes("/")
+      ? originalPath.slice(0, originalPath.lastIndexOf("/"))
+      : "";
+    const expectedName = originalPath.split("/").pop()?.replace(/\.[^.]+$/, "").toLowerCase() ?? "";
+    const foldersToInspect = [...new Set([expectedFolder, originalPath.split("/")[0]].filter(Boolean))];
+
+    for (const folder of foldersToInspect) {
+      const { data: objects, error: listError } = await supabase.storage
+        .from("avatars")
+        .list(folder, { limit: 100, sortBy: { column: "name", order: "asc" } });
+
+      if (listError) {
+        lastError = listError;
+        continue;
+      }
+
+      const imageObjects = (objects ?? []).filter((object) =>
+        /\.(png|jpe?g|webp|gif|avif)$/i.test(object.name) &&
+        (!expectedName || object.name.replace(/\.[^.]+$/, "").toLowerCase() === expectedName || foldersToInspect.length === 1)
+      );
+
+      for (const object of imageObjects) {
+        const actualPath = `${folder}/${object.name}`.replace(/^\/+/, "");
+        const { data: signedData, error: signError } = await supabase.storage
+          .from("avatars")
+          .createSignedUrl(actualPath, 3600);
+
+        if (!signError && signedData?.signedUrl) {
+          setPartnerAvatar(signedData.signedUrl);
+          return;
+        }
+        lastError = signError;
+      }
+    }
+
+    const errorDetails = lastError && typeof lastError === "object"
+      ? {
+          message: "message" in lastError ? String(lastError.message ?? "") : null,
+          name: "name" in lastError ? String(lastError.name ?? "") : null,
+          status: "status" in lastError ? String(lastError.status ?? "") : null,
+          statusCode: "statusCode" in lastError ? String(lastError.statusCode ?? "") : null,
+          details: "error" in lastError ? String(lastError.error ?? "") : null,
+        }
+      : String(lastError ?? "Unknown Supabase Storage error");
+
+    console.error("Partner avatar load failed:", JSON.stringify({
+      bucket: "avatars",
+      attemptedPaths: pathsToTry,
+      error: errorDetails,
+    }));
+    setPartnerAvatar(null);
+  }
 
   // Status
   const [online, setOnline] = useState(false);
@@ -148,6 +282,7 @@ export default function ChatPage() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchMatchIndex, setSearchMatchIndex] = useState(0);
+  const [searchDate, setSearchDate] = useState("");
 
   // Refs
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -319,12 +454,13 @@ export default function ChatPage() {
         async () => {
           const { data } = await supabase
             .from("profiles")
-            .select("username,is_online,last_seen")
+            .select("username,avatar_url,is_online,last_seen")
             .eq("id", partnerId)
             .single();
 
           if (data) {
             setPartnerName(data.username || "Partner");
+            void resolvePartnerAvatar(data.avatar_url);
             setOnline(data.is_online);
             setLastSeen(data.last_seen || "");
           }
@@ -817,7 +953,7 @@ export default function ChatPage() {
   // Get partner profile
   const { data: partner, error: partnerError } = await supabase
     .from("profiles")
-    .select("full_name,username,is_online,last_seen")
+    .select("full_name,username,avatar_url,is_online,last_seen")
     .eq("id", profile.partner_id)
     .single();
 
@@ -833,6 +969,7 @@ export default function ChatPage() {
       "Partner"
     );
 
+    void resolvePartnerAvatar(partner.avatar_url);
     setOnline(partner.is_online);
     setLastSeen(partner.last_seen || "");
   }
@@ -1013,7 +1150,7 @@ setTimeout(() => {
   // ==========================
   // Upload Image
   // ==========================
-  async function uploadImage(file: File) {
+  async function uploadImage(file: File, useViewOnce = viewOnce) {
     if (!partnerId || !myId) return;
 
     setUploading(true);
@@ -1043,7 +1180,8 @@ setTimeout(() => {
     image_url: fileName,
     audio_url: null,
     video_url: null,
-    view_once: viewOnce,
+    view_once: useViewOnce,
+    viewed_by: [],
     reply_to_id: replyTo?.id ?? null,
     seen: false,
     disappear_after: disappearAfter,
@@ -1402,8 +1540,29 @@ const expiresAt = disappearAfter
       )
     : visibleMessages;
 
+  // Calendar results are shown in a separate panel; the main conversation stays intact.
+  const dateSearchMessages = searchDate
+    ? visibleMessages.filter((m) => {
+        const messageDate = new Date(m.created_at);
+        const year = messageDate.getFullYear();
+        const month = String(messageDate.getMonth() + 1).padStart(2, "0");
+        const day = String(messageDate.getDate()).padStart(2, "0");
+        return `${year}-${month}-${day}` === searchDate;
+      })
+    : [];
+
   return (
     <main className="fixed inset-0 flex min-h-0 flex-col overflow-hidden bg-[#07070a] text-white">
+      {pendingImageFile && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-sm rounded-3xl border border-pink-400/20 bg-zinc-950 p-5 shadow-2xl">
+            <div className="mb-4 flex items-center gap-3"><div className="flex h-11 w-11 items-center justify-center rounded-full bg-pink-500/15 text-pink-200"><EyeOff size={23} /></div><div><h2 className="text-base font-semibold text-white">Send photo</h2><p className="text-xs text-zinc-400">Choose how your partner can view it</p></div></div>
+            <div className="mb-4 overflow-hidden rounded-2xl border border-white/10 bg-black/30 p-2"><img src={URL.createObjectURL(pendingImageFile)} alt="Selected photo preview" className="mx-auto max-h-56 max-w-full rounded-xl object-contain" /></div>
+            <label className={`mb-4 flex cursor-pointer items-start gap-3 rounded-2xl border p-3 ${pendingImageViewOnce ? "border-pink-400/40 bg-pink-500/10" : "border-white/10 bg-white/[0.03]"}`}><input type="checkbox" checked={pendingImageViewOnce} onChange={(e) => setPendingImageViewOnce(e.target.checked)} className="mt-1 h-4 w-4 accent-pink-500" /><span><span className="block text-sm font-medium text-white">👁 View once</span><span className="mt-0.5 block text-xs leading-5 text-zinc-400">Partner can open it once. After closing, it will be hidden for them.</span></span></label>
+            <div className="flex gap-2"><button type="button" onClick={() => { setPendingImageFile(null); setPendingImageViewOnce(false); }} className="flex-1 rounded-xl border border-white/10 px-4 py-3 text-sm text-zinc-300 hover:bg-white/5">Cancel</button><button type="button" disabled={uploading} onClick={async () => { const file = pendingImageFile; const once = pendingImageViewOnce; setPendingImageFile(null); setPendingImageViewOnce(false); setViewOnce(once); await uploadImage(file, once); }} className="flex-1 rounded-xl bg-gradient-to-r from-pink-500 to-fuchsia-600 px-4 py-3 text-sm font-semibold text-white disabled:opacity-50">{uploading ? "Sending…" : "Send photo"}</button></div>
+          </div>
+        </div>
+      )}
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
         <div className="absolute -left-24 -top-24 h-64 w-64 rounded-full bg-pink-600/10 blur-3xl" />
         <div className="absolute -bottom-32 -right-24 h-72 w-72 rounded-full bg-fuchsia-600/10 blur-3xl" />
@@ -1414,7 +1573,20 @@ const expiresAt = disappearAfter
         <div>
           <div className="flex min-w-0 items-center gap-3">
             <div className="relative flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full border border-pink-400/20 bg-gradient-to-br from-pink-500/25 via-fuchsia-500/10 to-zinc-800 shadow-[0_0_24px_rgba(236,72,153,0.12)] sm:h-11 sm:w-11">
-              <span className="text-lg">❤️</span>
+              {partnerAvatar ? (
+                <img
+                  src={partnerAvatar}
+                  alt={`${partnerName || "Partner"} profile photo`}
+                  className="h-full w-full cursor-zoom-in object-cover"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setShowPartnerPhoto(true);
+                  }}
+                  onError={() => setPartnerAvatar(null)}
+                />
+              ) : (
+                <span className="text-lg">❤️</span>
+              )}
               <span className={`absolute bottom-0.5 right-0.5 h-2.5 w-2.5 rounded-full border-2 border-zinc-950 ${online ? "bg-emerald-400" : "bg-zinc-500"}`} />
             </div>
             <button
@@ -1495,8 +1667,21 @@ const expiresAt = disappearAfter
 
             <div className="px-4 pb-8 pt-6 sm:px-5">
               <div className="flex flex-col items-center text-center">
-                <div className="relative flex h-24 w-24 items-center justify-center rounded-full border border-pink-400/20 bg-gradient-to-br from-pink-500/25 via-fuchsia-500/10 to-zinc-800 shadow-[0_0_45px_rgba(236,72,153,0.16)]">
-                  <span className="text-4xl">❤️</span>
+                <div className="relative flex h-24 w-24 items-center justify-center overflow-hidden rounded-full border border-pink-400/20 bg-gradient-to-br from-pink-500/25 via-fuchsia-500/10 to-zinc-800 shadow-[0_0_45px_rgba(236,72,153,0.16)]">
+                  {partnerAvatar ? (
+                    <img
+                      src={partnerAvatar}
+                      alt={`${partnerName || "Partner"} profile photo`}
+                      className="h-full w-full cursor-zoom-in object-cover"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        setShowPartnerPhoto(true);
+                      }}
+                      onError={() => setPartnerAvatar(null)}
+                    />
+                  ) : (
+                    <span className="text-4xl">❤️</span>
+                  )}
                   <span className={`absolute bottom-1.5 right-1.5 h-4 w-4 rounded-full border-[3px] border-[#101015] ${online ? "bg-emerald-400" : "bg-zinc-500"}`} />
                 </div>
                 <h2 className="mt-4 max-w-full truncate text-xl font-bold text-white">{partnerName || "Partner"}</h2>
@@ -1863,7 +2048,68 @@ const expiresAt = disappearAfter
                 <button type="button" onClick={() => goToSearchMatch(1)} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/[0.07] bg-white/[0.045] text-zinc-300">↓</button>
               </>
             )}
+            <button
+              type="button"
+              onClick={() => { setSearchOpen(false); setSearchQuery(""); setSearchDate(""); setSearchMatchIndex(0); }}
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/[0.07] bg-white/[0.045] text-zinc-400 transition hover:bg-white/[0.08] hover:text-white"
+              title="Close search"
+              aria-label="Close search"
+            >
+              <X size={18} />
+            </button>
           </div>
+          <div className="mt-2 flex items-center gap-2">
+            <label className="flex shrink-0 items-center gap-2 rounded-xl border border-pink-400/20 bg-pink-500/[0.07] px-3 py-2 text-xs font-medium text-pink-200">
+              <span aria-hidden="true">📅</span>
+              <span>Choose date</span>
+              <input
+                type="date"
+                value={searchDate}
+                onChange={(event) => setSearchDate(event.target.value)}
+                aria-label="Search chat by date"
+                className="max-w-[135px] bg-transparent text-xs text-white outline-none [color-scheme:dark]"
+              />
+            </label>
+            {searchDate && (
+              <button
+                type="button"
+                onClick={() => setSearchDate("")}
+                className="rounded-xl border border-white/[0.08] px-3 py-2 text-xs text-zinc-300 hover:bg-white/[0.06]"
+              >
+                Clear date
+              </button>
+            )}
+            <span className="ml-auto text-[11px] text-zinc-500">Text + calendar search</span>
+          </div>
+          {searchDate && (
+            <section className="mt-3 overflow-hidden rounded-2xl border border-pink-400/15 bg-zinc-900/90 shadow-xl">
+              <div className="flex items-center justify-between gap-3 border-b border-white/[0.06] px-3 py-2.5">
+                <div>
+                  <p className="text-sm font-semibold text-white">Messages on {new Date(`${searchDate}T12:00:00`).toLocaleDateString([], { day: "numeric", month: "long", year: "numeric" })}</p>
+                  <p className="mt-0.5 text-[11px] text-zinc-500">{dateSearchMessages.length} message{dateSearchMessages.length === 1 ? "" : "s"} found</p>
+                </div>
+                <button type="button" onClick={() => setSearchDate("")} aria-label="Close date results" className="flex h-8 w-8 items-center justify-center rounded-full text-zinc-400 hover:bg-white/[0.08] hover:text-white"><X size={17} /></button>
+              </div>
+              <div className="max-h-64 overflow-y-auto p-2">
+                {dateSearchMessages.length ? dateSearchMessages.map((msg) => (
+                  <button
+                    type="button"
+                    key={msg.id}
+                    onClick={() => { setSearchDate(""); scrollToMessage(msg.id); }}
+                    className={`mb-1 block w-full rounded-xl border border-white/[0.05] px-3 py-2.5 text-left transition hover:border-pink-400/20 hover:bg-pink-500/[0.06] ${msg.sender_id === myId ? "bg-pink-500/[0.035]" : "bg-white/[0.02]"}`}
+                  >
+                    <span className="mb-1 flex items-center justify-between gap-3 text-[10px] text-zinc-500">
+                      <span className="font-medium text-pink-300">{msg.sender_id === myId ? "You" : partnerName || "Partner"}</span>
+                      <span>{new Date(msg.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
+                    </span>
+                    <span className="block truncate text-sm text-zinc-200">{msg.message?.trim() || (msg.image_url ? "📷 Photo" : msg.video_url ? "🎥 Video" : msg.audio_url ? "🎤 Voice message" : "Attachment")}</span>
+                  </button>
+                )) : (
+                  <p className="px-3 py-7 text-center text-sm text-zinc-500">No messages found for this date ❤️</p>
+                )}
+              </div>
+            </section>
+          )}
         </div>
       )}
 
@@ -2097,21 +2343,21 @@ const expiresAt = disappearAfter
                     </p>
                   ) : (
                     <>
-                      {msg.image_url && (
-  <Image
-    src={msg.image_url}
-    alt="Chat"
-    width={500}
-    height={500}
-    sizes="100vw"
-    unoptimized
-    className="mb-2 max-h-[60vh] w-full cursor-pointer rounded-2xl object-cover transition hover:opacity-95"
-    onClick={() => {
-      setPreviewImage(msg.image_url!);
-      setPreviewImageMessage(msg);
-    }}
-  />
-)}
+                      {msg.image_url && (msg.view_once ? (
+  (msg.sender_id !== myId && ((msg.viewed_by || []).includes(myId) || (msg.deleted_for || []).includes(myId))) ? (
+    <div className="mb-2 flex min-w-[190px] items-center gap-3 rounded-2xl border border-white/10 bg-black/25 px-4 py-3 text-sm text-zinc-400">
+      <EyeOff size={22} className="text-pink-300" />
+      <span>Opened photo · View once</span>
+    </div>
+  ) : (
+    <button type="button" onClick={() => { setPreviewImage(msg.image_url!); setPreviewImageMessage(msg); }} className="mb-2 flex min-w-[190px] items-center gap-3 rounded-2xl border border-pink-400/20 bg-gradient-to-r from-pink-500/10 to-fuchsia-500/10 px-4 py-3 text-left transition hover:bg-pink-500/15">
+      <span className="flex h-11 w-11 items-center justify-center rounded-full bg-pink-500/20 text-pink-200"><EyeOff size={22} /></span>
+      <span><span className="block text-sm font-semibold text-white">Photo</span><span className="block text-xs text-pink-200">View once · Tap to open</span></span>
+    </button>
+  )
+) : (
+  <Image src={msg.image_url} alt="Chat" width={500} height={500} sizes="100vw" loading="eager" unoptimized className="mb-2 max-h-[60vh] w-full cursor-pointer rounded-2xl object-cover transition hover:opacity-95" onClick={() => { setPreviewImage(msg.image_url!); setPreviewImageMessage(msg); }} />
+))}
 
 {msg.video_url && (
   <div className="relative mb-2 group">
@@ -2261,7 +2507,8 @@ const expiresAt = disappearAfter
       if (!file) return;
 
       if (file.type.startsWith("image")) {
-        uploadImage(file);
+        setPendingImageFile(file);
+        setPendingImageViewOnce(false);
       } else if (file.type.startsWith("video")) {
         uploadVideo(file);
       }
@@ -2281,7 +2528,8 @@ const expiresAt = disappearAfter
 
       if (!file) return;
 
-      uploadImage(file);
+      setPendingImageFile(file);
+      setPendingImageViewOnce(false);
     }}
   />
 
@@ -3023,10 +3271,10 @@ const expiresAt = disappearAfter
                   previewImageMessage?.view_once &&
                   previewImageMessage.sender_id !== myId
                 ) {
-                  const viewed = [
+                  const viewed = Array.from(new Set([
                     ...(previewImageMessage.viewed_by || []),
                     myId,
-                  ];
+                  ]));
 
                   await supabase
                     .from("messages")
@@ -3139,6 +3387,32 @@ sm:max-w-[90vw]
             <Download size={20} />
             Download
           </a>
+        </div>
+      )}
+
+      {/* WhatsApp-style partner profile photo viewer */}
+      {showPartnerPhoto && partnerAvatar && (
+        <div
+          className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/95 p-4 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-label={`${partnerName || "Partner"} profile photo`}
+          onClick={() => setShowPartnerPhoto(false)}
+        >
+          <button
+            type="button"
+            aria-label="Close photo preview"
+            className="absolute right-4 top-4 flex h-11 w-11 items-center justify-center rounded-full bg-white/10 text-2xl text-white transition hover:bg-white/20"
+            onClick={() => setShowPartnerPhoto(false)}
+          >
+            <X size={22} />
+          </button>
+          <img
+            src={partnerAvatar}
+            alt={`${partnerName || "Partner"} profile photo enlarged`}
+            className="max-h-[88vh] max-w-[95vw] select-none rounded-lg object-contain shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          />
         </div>
       )}
     </main>
